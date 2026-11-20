@@ -144,7 +144,8 @@ jobs:
               $done = $true; break
             }
           }
-          if (!$done) { Get-Content "$env:LOCALAPPDATA\StreamGrab\streamgrab.log" -Tail 40; throw "app did not come back updated" }
+          Write-Host "--- update helper log"; Get-Content "$env:LOCALAPPDATA\StreamGrab\update.log" -ErrorAction SilentlyContinue
+          if (!$done) { Write-Host "--- app log"; Get-Content "$env:LOCALAPPDATA\StreamGrab\streamgrab.log" -Tail 40; throw "app did not come back updated" }
 
   release:
     name: Publish release

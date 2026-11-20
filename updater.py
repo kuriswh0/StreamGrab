@@ -170,21 +170,27 @@ def _quit_parent_later(wait=12):
 def _apply_windows(setup, root, tmp):
     pid = os.getpid()  # the launcher runs the engine in its own process
     profile = os.path.join(os.environ.get("LOCALAPPDATA") or "", "StreamGrab", "window")
-    script = os.path.join(tmp, "update.cmd")
-    with open(script, "w", encoding="utf-8") as fh:
-        fh.write(f"""@echo off
-rem Waits for StreamGrab to exit, installs the new version silently and reopens it.
-for /l %%i in (1,1,240) do (
-  tasklist /FI "PID eq {pid}" 2>nul | find "{pid}" >nul || goto installed
-  timeout /t 1 /nobreak >nul
-)
-:installed
-powershell -NoProfile -Command "Get-CimInstance Win32_Process -Filter \\"Name='msedge.exe'\\" | Where-Object {{ $_.CommandLine -like '*{profile}*' }} | ForEach-Object {{ Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }}"
-"{setup}" /S /D={root}
-start "" "{os.path.join(root, 'StreamGrab.exe')}"
+    log = os.path.join(os.environ.get("LOCALAPPDATA") or tmp, "StreamGrab", "update.log")
+    script = os.path.join(tmp, "update.ps1")
+    q = lambda s: "'" + s.replace("'", "''") + "'"  # PowerShell single-quoted string
+    with open(script, "w", encoding="utf-8-sig") as fh:
+        fh.write(f"""# Waits for StreamGrab to exit, installs the new version silently and reopens it.
+$log = {q(log)}
+function Log($m) {{ Add-Content -Path $log -Value ((Get-Date -Format 'yyyy-MM-dd HH:mm:ss ') + $m) }}
+Log 'waiting for StreamGrab ({pid}) to close'
+Wait-Process -Id {pid} -Timeout 180 -ErrorAction SilentlyContinue
+if (Get-Process -Id {pid} -ErrorAction SilentlyContinue) {{ Log 'still running; stopping it'; Stop-Process -Id {pid} -Force -ErrorAction SilentlyContinue; Start-Sleep 2 }}
+# Close the old app window (Edge with StreamGrab's own profile).
+Get-CimInstance Win32_Process -Filter "Name='msedge.exe'" | Where-Object {{ $_.CommandLine -like ('*' + {q(profile)} + '*') }} | ForEach-Object {{ Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }}
+Log 'installing'
+$p = Start-Process -FilePath {q(setup)} -ArgumentList '/S', ('/D=' + {q(root)}) -Wait -PassThru
+Log ('installer exit code ' + $p.ExitCode)
+Start-Process -FilePath {q(os.path.join(root, 'StreamGrab.exe'))}
+Log 'reopened'
 """)
     flags = 0x00000008 | 0x00000200 | 0x08000000  # DETACHED_PROCESS | NEW_PROCESS_GROUP | NO_WINDOW
-    subprocess.Popen(["cmd.exe", "/c", script], creationflags=flags, close_fds=True,
+    subprocess.Popen(["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden",
+                      "-File", script], creationflags=flags, close_fds=True,
                      stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 

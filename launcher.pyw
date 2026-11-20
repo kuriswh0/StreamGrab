@@ -128,6 +128,9 @@ def main():
         os.remove(INSTANCE)
     except OSError:
         pass
+    if server.updater.QUIT_REQUESTED.is_set():
+        log("exiting for the update")
+        os._exit(0)  # don't let a lingering thread keep the process (and its files) alive
 
 
 if __name__ == "__main__":
