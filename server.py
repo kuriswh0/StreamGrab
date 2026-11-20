@@ -309,9 +309,9 @@ def _version_tuple(v):
     return tuple(int(x) for x in re.findall(r"\d+", v)[:3]) or (0,)
 
 
-def update_status():
-    """Latest GitHub release vs this version. Cached for 6 hours; never raises."""
-    if _UPDATE.get("t", 0) > time.time() - 6 * 3600:
+def update_status(force=False):
+    """Latest GitHub release vs this version. Cached for 6 hours (force: ask GitHub now); never raises."""
+    if not force and _UPDATE.get("t", 0) > time.time() - 6 * 3600:
         return _UPDATE["data"]
     data = {"current": APP_VERSION, "newer": False}
     try:
@@ -1013,7 +1013,7 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/settings":
             return self._send(200, {**SETTINGS, "platform": PLATFORM, "version": APP_VERSION})
         if path == "/api/update":
-            return self._send(200, update_status())
+            return self._send(200, update_status(force="force=1" in urlparse(self.path).query))
         if path == "/api/audio/formats":
             return self._send(200, {"formats": convert.formats(), "inputs": sorted(convert.INPUT_EXTS)})
         if path == "/api/fonts":

@@ -299,6 +299,7 @@
     <div class="sep"></div>
     <button class="nav" id="openFolder" title="Open the download folder"><span class="i">📁</span><span>Open folder</span></button>
     <button class="nav" id="settingsBtn"><span class="i">⚙︎</span><span>Settings</span></button>
+    <button class="nav" id="updBtn" title="Check GitHub for a newer version"><span class="i">↻</span><span id="updBtnTxt">Check for updates</span></button>
     <a class="upd hidden" id="updNote" target="_blank" rel="noopener" title="Open the download page"><b>Update available</b><span id="updVer"></span></a>
     <div class="disk" id="disk" title="Open the download folder">
       <div class="hint">Downloads folder</div>
@@ -1516,13 +1517,28 @@ async function loadDisk() {
 }
 loadDisk(); setInterval(loadDisk, 60000);
 // Update notice: the engine asks GitHub for the latest release (cached 6 h there).
-async function checkUpdate() {
+async function checkUpdate(force = false) {
   try {
-    const u = await api('/api/update');
+    const u = await api('/api/update' + (force ? '?force=1' : ''));
     $('#sVersion').textContent = 'StreamGrab ' + u.current;
     if (u.newer && u.url) { $('#updNote').href = u.url; $('#updVer').textContent = `Version ${u.latest} · download`; $('#updNote').classList.remove('hidden'); }
-  } catch {}
+    return u;
+  } catch (e) { return {error: e.message}; }
 }
+// "Check for updates" in the sidebar: asks GitHub right away and says what it found for a few seconds.
+let updMsgTimer = null;
+$('#updBtn').onclick = async () => {
+  const btn = $('#updBtn'), txt = $('#updBtnTxt'), show = (msg, title) => {
+    txt.textContent = msg; btn.title = title || msg;
+    clearTimeout(updMsgTimer); updMsgTimer = setTimeout(() => { txt.textContent = 'Check for updates'; btn.title = 'Check GitHub for a newer version'; }, 5000);
+  };
+  btn.disabled = true; txt.textContent = 'Checking…'; clearTimeout(updMsgTimer);
+  const u = await checkUpdate(true);
+  btn.disabled = false;
+  if (u.newer) show(`${u.latest} available`, `Version ${u.latest} is available: use the download link below`);
+  else if (u.error || !u.latest) show("Couldn't check for updates", u.error || 'No release found');
+  else show(`Up to date · ${u.current}`);
+};
 checkUpdate(); setInterval(checkUpdate, 6 * 3600 * 1000);
 $('#settingsBtn').onclick = async () => {
   const s = await api('/api/settings');
