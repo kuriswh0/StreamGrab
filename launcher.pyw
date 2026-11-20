@@ -113,6 +113,9 @@ def main():
         time.sleep(1)
         if window is not None and window.poll() is not None and time.time() - server.LAST_SEEN > 5:
             break
+        if server.updater.QUIT_REQUESTED.is_set():
+            log("closing to install an update")
+            break
         seen = server.LAST_SEEN
         if seen and time.time() - seen > 60:
             break

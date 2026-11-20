@@ -36,6 +36,7 @@
   .disk { margin-top:auto; padding:12px; border-radius:10px; background:var(--s2); border:1px solid var(--line); cursor:pointer; }
   .upd { display:block; margin-top:auto; margin-bottom:8px; padding:10px 12px; border-radius:10px; background:#9b5cff1f; border:1px solid #9b5cff66; color:#dcc8ff; text-decoration:none; font-size:12px; }
   .upd b { display:block; color:#fff; font-size:13px; } .upd:hover { border-color:var(--accent); }
+  .upd.busy { cursor:progress; border-color:var(--accent); }
   .upd:not(.hidden) + .disk { margin-top:0; }
   .disk .p { font-weight:700; margin:2px 0 8px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 
@@ -1521,10 +1522,44 @@ async function checkUpdate(force = false) {
   try {
     const u = await api('/api/update' + (force ? '?force=1' : ''));
     $('#sVersion').textContent = 'StreamGrab ' + u.current;
-    if (u.newer && u.url) { $('#updNote').href = u.url; $('#updVer').textContent = `Version ${u.latest} · download`; $('#updNote').classList.remove('hidden'); }
+    if (u.newer && u.url && !updating) {
+      updAuto = !!u.auto;
+      $('#updNote').href = u.url;
+      $('#updNote').title = updAuto ? 'Download and install it, then reopen StreamGrab' : 'Open the download page';
+      $('#updNote').querySelector('b').textContent = updAuto ? `Update to ${u.latest}` : 'Update available';
+      $('#updVer').textContent = updAuto ? 'Installs and reopens StreamGrab' : `Version ${u.latest} · download`;
+      $('#updNote').classList.remove('hidden');
+    }
     return u;
   } catch (e) { return {error: e.message}; }
 }
+// Self-update (installed copies): download, check, install, reopen. Portable copies just get the link.
+let updAuto = false, updating = false;
+$('#updNote').addEventListener('click', async e => {
+  if (!updAuto) return;  // plain link to the release page
+  e.preventDefault();
+  if (updating) return;
+  const note = $('#updNote'), ver = $('#updVer'), head = note.querySelector('b');
+  try {
+    await api('/api/update/install', {});
+  } catch (err) { ver.textContent = err.message; return; }
+  updating = true; note.classList.add('busy');
+  const label = {downloading: 'Downloading', verifying: 'Checking the download', installing: 'Installing', restarting: 'Reopening StreamGrab…'};
+  while (true) {
+    await new Promise(r => setTimeout(r, 400));
+    let s; try { s = await api('/api/update/progress'); } catch { continue; }
+    if (s.stage === 'error') { head.textContent = "Update didn't install"; ver.textContent = s.error; updating = false; note.classList.remove('busy'); return; }
+    head.textContent = label[s.stage] || 'Updating';
+    ver.textContent = s.stage === 'downloading' ? `${Math.round(s.progress * 100)}%` : 'Keep StreamGrab open';
+    if (s.stage === 'restarting') {
+      ver.textContent = 'It will open again in a moment';
+      await new Promise(r => setTimeout(r, 600));
+      if (window.webkit?.messageHandlers?.native) window.webkit.messageHandlers.native.postMessage({type: 'quit'});
+      else window.close();  // Windows: the launcher also closes for the update
+      return;
+    }
+  }
+});
 // "Check for updates" in the sidebar: asks GitHub right away and says what it found for a few seconds.
 let updMsgTimer = null;
 $('#updBtn').onclick = async () => {

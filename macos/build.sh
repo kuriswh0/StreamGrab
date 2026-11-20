@@ -28,7 +28,7 @@ done
 iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/AppIcon.icns"
 
 echo "→ Bundling Python engine"
-cp server.py chat.py render.py live.py fastdl.py compat.py convert.py VERSION "$APP/Contents/Resources/app/"
+cp server.py chat.py render.py live.py fastdl.py compat.py convert.py updater.py VERSION "$APP/Contents/Resources/app/"
 mkdir -p "$APP/Contents/Resources/app/bin"
 echo "→ Compiling chat renderer"
 swiftc -O -swift-version 5 -target "$(uname -m)-apple-macos12.0" macos/chatrender.swift \

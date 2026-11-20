@@ -35,6 +35,7 @@ import convert
 import fastdl
 import live
 import render
+import updater
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 STATIC = os.path.join(HERE, "static")
@@ -323,6 +324,9 @@ def update_status(force=False):
         url = rel.get("html_url") or ""
         data.update(latest=latest, url=url if url.startswith(f"https://github.com/{UPDATE_REPO}/") else "",
                     newer=APP_VERSION != "dev" and _version_tuple(latest) > _version_tuple(APP_VERSION))
+        asset = updater.pick_asset(rel.get("assets"))
+        data["auto"] = bool(asset)  # this copy can download + install it itself
+        _UPDATE["asset"] = asset
     except Exception as e:  # noqa: BLE001 - offline, rate-limited or no releases yet: just no notice
         data["error"] = str(e)[:200]
     _UPDATE.update(t=time.time(), data=data)
@@ -1012,6 +1016,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, jobs)
         if path == "/api/settings":
             return self._send(200, {**SETTINGS, "platform": PLATFORM, "version": APP_VERSION})
+        if path == "/api/update/progress":
+            return self._send(200, updater.STATE)
         if path == "/api/update":
             return self._send(200, update_status(force="force=1" in urlparse(self.path).query))
         if path == "/api/audio/formats":
@@ -1128,6 +1134,13 @@ class Handler(BaseHTTPRequestHandler):
                     return self._send(200, {"path": d, "free": u.free, "total": u.total})
                 except OSError as e:
                     return self._send(200, {"path": SETTINGS["output_dir"], "error": str(e)})
+            if path == "/api/update/install":
+                st = update_status(force=True)
+                asset = _UPDATE.get("asset")
+                if not (st.get("newer") and asset):
+                    return self._send(400, {"error": "No update to install."})
+                return self._send(200, updater.start(asset, lambda: any(
+                    j.status in ("running", "queued") for j in list(JOBS.values()))))
             if path == "/api/jobs/clear":
                 with JOBS_LOCK:
                     for k in [k for k, j in JOBS.items() if j.status in ("done", "error", "cancelled")]:

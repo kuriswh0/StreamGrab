@@ -34,7 +34,7 @@ find "$STAGE/python/Lib/site-packages" -name "__pycache__" -type d -prune -exec 
 cp "$STAGE/python/LICENSE.txt" "$STAGE/licenses/Python-LICENSE.txt"
 
 echo "→ App"
-cp server.py chat.py render.py live.py fastdl.py compat.py convert.py chatrender.py launcher.pyw VERSION "$STAGE/app/"
+cp server.py chat.py render.py live.py fastdl.py compat.py convert.py updater.py chatrender.py launcher.pyw VERSION "$STAGE/app/"
 cp -R static "$STAGE/app/static"
 find "$STAGE/app" -name ".DS_Store" -delete
 

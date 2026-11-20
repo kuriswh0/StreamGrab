@@ -215,6 +215,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     // JS -> native bridge: window.webkit.messageHandlers.native.postMessage({type: "pickFolder", current})
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
         guard let body = message.body as? [String: Any], let type = body["type"] as? String else { return }
+        if type == "quit" {  // the page asks to close, e.g. to install an update
+            quitting = true
+            NSApp.terminate(nil)
+            return
+        }
         if type == "pickFolder" {
             let panel = NSOpenPanel()
             panel.canChooseDirectories = true

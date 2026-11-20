@@ -25,7 +25,7 @@ Download Twitch and YouTube videos, chat and live streams, and bake the chat rig
 - **Channel browser:** list a channel's broadcasts, highlights or uploads and send them to the Download page.
 - **Audio converter:** MP3, AAC, OGG, Opus, WMA, FLAC, ALAC, WAV and AIFF, in batches, keeping tags and cover art.
 - **Queue** with progress, cancel, retry and re-render chat. Batch downloads: paste several links.
-- **Update notice** in the app when a new version is out, plus a **Check for updates** button.
+- **Updates itself:** when a new version is out, click **Update** in the sidebar and StreamGrab downloads it, installs it and reopens (the portable Windows zip gets a download link instead).
 
 <sub>Demo footage: NASA's SpaceX Crew-13 launch (NASA). Chat in the demos is sample chat.</sub>
 
@@ -111,7 +111,7 @@ The version number lives in `VERSION`; the build scripts and the app read it fro
 - **yt-dlp updates:** every Monday `.github/workflows/update-ytdlp.yml` checks for a new yt-dlp. If
   there is one, it bumps the patch version (1.0.1 → 1.0.2) and publishes a new release with it.
 - **In the app:** the engine checks the latest GitHub Release (at most every 6 hours) and the sidebar
-  shows "Update available" with a link to the download page. **Check for updates** at the bottom of the sidebar asks GitHub right away. Settings shows the current version.
+  shows an update box. Installed copies (the Mac app and the Windows installer version) update themselves from it: `updater.py` downloads the release file, checks its SHA-256 against GitHub, installs it and reopens the app, and won't run while downloads are active. Portable copies get a link to the download page. **Check for updates** at the bottom of the sidebar asks GitHub right away. Settings shows the current version.
 
 The bundled tools (`macos/vendor`, `windows/vendor`) and the built installers (`dist`) aren't in git;
 the workflows download the tools at build time.

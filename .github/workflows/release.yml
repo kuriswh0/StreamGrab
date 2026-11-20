@@ -117,6 +117,34 @@ jobs:
           Start-Process $setup -ArgumentList '/S' -Wait
           if (!(Test-Path "$env:LOCALAPPDATA\Programs\StreamGrab\StreamGrab.exe")) { throw "not installed" }
           Write-Host "Installed to $env:LOCALAPPDATA\Programs\StreamGrab"
+      - name: Self-update installs the latest release and reopens
+        shell: pwsh
+        run: |
+          $dir = "$env:LOCALAPPDATA\Programs\StreamGrab"
+          $inst = "$env:LOCALAPPDATA\StreamGrab\instance.json"
+          Set-Content "$dir\app\VERSION" "1.0.0"          # pretend to be an old version
+          Remove-Item $inst -ErrorAction SilentlyContinue
+          Start-Process "$dir\StreamGrab.exe"
+          for ($i = 0; $i -lt 60 -and !(Test-Path $inst); $i++) { Start-Sleep 1 }
+          $old = Get-Content $inst | ConvertFrom-Json
+          $base = "http://127.0.0.1:$($old.port)"
+          $h = @{ Origin = $base }
+          $u = Invoke-RestMethod "$base/api/update?force=1" -Headers $h
+          Write-Host "current $($u.current), latest $($u.latest), auto $($u.auto)"
+          if (!$u.newer -or !$u.auto) { throw "update not offered" }
+          Invoke-RestMethod "$base/api/update/install" -Method Post -Headers $h -ContentType 'application/json' -Body '{}' | Out-Null
+          $done = $false
+          for ($i = 0; $i -lt 240; $i++) {
+            Start-Sleep 2
+            if ((Test-Path $inst) -and ((Get-Content $inst | ConvertFrom-Json).pid -ne $old.pid)) {
+              $new = Get-Content $inst | ConvertFrom-Json
+              try { $s = Invoke-RestMethod "http://127.0.0.1:$($new.port)/api/settings" -Headers @{ Origin = "http://127.0.0.1:$($new.port)" } } catch { continue }
+              Write-Host "reopened as version $($s.version)"
+              if ($s.version -ne $u.latest) { throw "expected $($u.latest), got $($s.version)" }
+              $done = $true; break
+            }
+          }
+          if (!$done) { Get-Content "$env:LOCALAPPDATA\StreamGrab\streamgrab.log" -Tail 40; throw "app did not come back updated" }
 
   release:
     name: Publish release
