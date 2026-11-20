@@ -188,7 +188,9 @@ Log ('installer exit code ' + $p.ExitCode)
 Start-Process -FilePath {q(os.path.join(root, 'StreamGrab.exe'))}
 Log 'reopened'
 """)
-    flags = 0x00000008 | 0x00000200 | 0x08000000  # DETACHED_PROCESS | NEW_PROCESS_GROUP | NO_WINDOW
+    # A hidden console (not DETACHED_PROCESS: PowerShell started without any console exits at once,
+    # tested on Windows 11); its own process group so it outlives StreamGrab.
+    flags = 0x00000200 | 0x08000000  # CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW
     subprocess.Popen(["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden",
                       "-File", script], creationflags=flags, close_fds=True,
                      stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
