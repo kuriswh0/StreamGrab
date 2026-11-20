@@ -11,6 +11,8 @@ Standard library only.
 """
 import argparse, json, os, shutil, subprocess, sys, tempfile, time, urllib.request, wave
 
+# Windows consoles default to a legacy code page; error texts from YouTube contain curly quotes.
+sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 ap = argparse.ArgumentParser()
 ap.add_argument("--python", required=True)
 ap.add_argument("--app", required=True)
