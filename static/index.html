@@ -1,0 +1,1717 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" type="image/png" href="/icon.png">
+<title>StreamGrab</title>
+<style>
+  :root {
+    --bg:#09090c; --s1:#111116; --s2:#17171d; --s3:#1e1e26; --line:#26262f; --line2:#33333d;
+    --panel:var(--s2); --panel2:var(--s3);
+    --text:#ededf2; --dim:#8b8b99; --dim2:#5f5f6b;
+    --accent:#9b5cff; --accent2:#7c3aed; --glow:rgba(155,92,255,.22); --link:#c4a5ff;
+    --yt:#ff2d55; --ok:#34d399; --err:#f87171; --rec:#ef4444; --warn:#fbbf24;
+  }
+  * { box-sizing:border-box; }
+  html, body { height:100%; }
+  body { margin:0; background:var(--bg); color:var(--text); font:13.5px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; overflow:hidden; }
+  ::-webkit-scrollbar { width:10px; height:10px; } ::-webkit-scrollbar-thumb { background:#2a2a33; border-radius:10px; border:3px solid transparent; background-clip:padding-box; }
+  ::-webkit-scrollbar-track { background:transparent; }
+
+  /* ---- app shell: sidebar | view | queue ---- */
+  .app { display:grid; grid-template-columns:212px minmax(0,1fr) 350px; height:100vh; }
+  .app.full { grid-template-columns:212px minmax(0,1fr); }
+  .app.full > .queue { display:none; }
+  .side { background:var(--s1); border-right:1px solid var(--line); padding:16px 12px; display:flex; flex-direction:column; gap:3px; min-height:0; }
+  .logo { font-weight:800; font-size:15px; letter-spacing:.2px; display:flex; align-items:center; gap:9px; padding:2px 8px 16px; }
+  .logo .mark { width:26px; height:26px; border-radius:8px; background:linear-gradient(135deg,#a970ff,#6d28d9); display:grid; place-items:center; font-size:12px; box-shadow:0 4px 14px var(--glow); }
+  .logo em { font-style:normal; color:var(--accent); }
+  .nav { display:flex; align-items:center; gap:11px; padding:8px 10px; border-radius:8px; color:var(--dim); font:inherit; font-weight:600; background:none; border:none; cursor:pointer; text-align:left; width:100%; }
+  .nav .i { width:18px; text-align:center; font-size:14px; }
+  .nav:hover { color:var(--text); background:#ffffff06; }
+  .nav.on { background:var(--s3); color:var(--text); box-shadow:inset 2px 0 0 var(--accent); }
+  .nav .badge { margin-left:auto; font-size:10px; background:var(--rec); color:#fff; padding:0 6px; border-radius:10px; font-weight:800; line-height:16px; }
+  .side .sep { height:1px; background:var(--line); margin:10px 6px; }
+  .disk { margin-top:auto; padding:12px; border-radius:10px; background:var(--s2); border:1px solid var(--line); cursor:pointer; }
+  .upd { display:block; margin-top:auto; margin-bottom:8px; padding:10px 12px; border-radius:10px; background:#9b5cff1f; border:1px solid #9b5cff66; color:#dcc8ff; text-decoration:none; font-size:12px; }
+  .upd b { display:block; color:#fff; font-size:13px; } .upd:hover { border-color:var(--accent); }
+  .upd:not(.hidden) + .disk { margin-top:0; }
+  .disk .p { font-weight:700; margin:2px 0 8px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+
+  .view { display:flex; flex-direction:column; min-height:0; min-width:0; }
+  .vhead { padding:18px 24px 12px; display:flex; align-items:center; gap:12px; }
+  .vhead h1 { margin:0; font-size:20px; letter-spacing:-.2px; flex:1; }
+  .vbody { flex:1; overflow:auto; padding:0 24px 20px; display:flex; flex-direction:column; gap:14px; }
+  .actbar { padding:13px 24px; border-top:1px solid var(--line); display:flex; align-items:center; gap:14px; background:var(--s1); }
+  .actbar .sum { flex:1; min-width:0; }
+  .folderbtn { display:flex; align-items:center; gap:7px; max-width:260px; min-width:0; padding:10px 13px; }
+  .folderbtn .ell { min-width:0; }
+  .actbar .sum b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .actbar .sum span { font-size:12px; color:var(--dim); display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+
+  /* ---- controls ---- */
+  .card { background:var(--s2); border:1px solid var(--line); border-radius:14px; padding:16px; }
+  .lbl, h2 { font-size:11px; font-weight:700; color:var(--dim); text-transform:uppercase; letter-spacing:.6px; margin:0; display:flex; align-items:center; gap:8px; }
+  h2 .sp { flex:1; }
+  textarea, input[type=text], select { width:100%; background:var(--s1); border:1px solid var(--line2); color:var(--text); border-radius:10px; padding:9px 12px; font:inherit; }
+  textarea { resize:none; min-height:42px; overflow:hidden; line-height:1.45; }
+  textarea::placeholder, input::placeholder { color:var(--dim2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  select { -webkit-appearance:none; appearance:none; padding-right:30px; cursor:pointer;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%238b8b99'/%3E%3C/svg%3E");
+    background-repeat:no-repeat; background-position:right 11px center; }
+  textarea:focus, input:focus, select:focus { outline:none; border-color:var(--accent); box-shadow:0 0 0 3px #9b5cff26; }
+  .urlbox { display:flex; gap:10px; align-items:flex-start; }
+  .urlbox textarea, .urlbox input[type=text] { font-size:14px; padding:11px 14px; }
+  .row { display:flex; gap:10px; align-items:center; }
+  .row > * { min-width:0; }
+  .row > .btn, .row > button { flex-shrink:0; }
+  .grow { flex:1; }
+  .btn { background:var(--accent); color:#fff; border:none; border-radius:9px; padding:9px 16px; font:inherit; font-weight:700; cursor:pointer; white-space:nowrap; display:inline-flex; align-items:center; justify-content:center; gap:7px; }
+  .btn:hover { background:var(--accent2); }
+  .btn:disabled { opacity:.45; cursor:default; }
+  .btn.lg { padding:11px 24px; font-size:14px; border-radius:10px; box-shadow:0 6px 20px var(--glow); }
+  .btn.sec { background:var(--s3); border:1px solid var(--line2); color:var(--text); }
+  .btn.sec:hover { border-color:var(--dim2); background:#24242d; }
+  .btn.sm { padding:5px 10px; font-size:12px; border-radius:7px; }
+  .btn.rec { background:var(--rec); box-shadow:0 6px 20px #ef444430; } .btn.rec:hover { background:#d33131; }
+  .ghost { background:none; border:none; color:var(--dim); padding:5px 8px; border-radius:6px; cursor:pointer; font:inherit; font-weight:600; font-size:12px; }
+  .ghost:hover { color:var(--text); }
+  a.link, .link { color:var(--link); text-decoration:none; cursor:pointer; font-size:12px; font-weight:600; }
+  a.link:hover { text-decoration:underline; }
+  label.chk { display:inline-flex; align-items:center; gap:8px; cursor:pointer; user-select:none; color:var(--text); }
+  /* switches: <label class="tog"><span>Text</span><input type="checkbox" class="sw"></label> */
+  input.sw { -webkit-appearance:none; appearance:none; width:34px; height:20px; border-radius:20px; background:var(--line2); position:relative; flex-shrink:0; cursor:pointer; margin:0; transition:background .15s; }
+  input.sw::after { content:""; position:absolute; top:3px; left:3px; width:14px; height:14px; border-radius:50%; background:#fff; transition:left .15s; }
+  input.sw:checked { background:var(--accent); } input.sw:checked::after { left:17px; }
+  input.sw:disabled { opacity:.4; cursor:default; }
+  .tog { display:flex; align-items:center; gap:10px; cursor:pointer; user-select:none; }
+  .tog > span { flex:1; } .tog small { display:block; color:var(--dim); font-size:12px; }
+  /* chips: <label class="chip"><input type="checkbox">Text</label> */
+  .chips { display:flex; flex-wrap:wrap; gap:6px; }
+  .chip { display:inline-flex; align-items:center; gap:6px; padding:6px 12px; border-radius:20px; border:1px solid var(--line2); background:var(--s1); color:var(--dim); font-weight:600; font-size:12px; cursor:pointer; user-select:none; }
+  .chip input { display:none; }
+  .chip:has(input:checked) { border-color:#9b5cff80; background:#9b5cff1f; color:#dcc8ff; }
+  .chip:has(input:checked)::before { content:"✓"; font-size:11px; }
+  .chip:has(input:disabled) { opacity:.45; cursor:default; }
+  .field { display:flex; flex-direction:column; gap:6px; }
+  .field > span { font-size:12px; color:var(--dim); font-weight:600; }
+  .grid3 { display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:14px; }
+  .grid2 { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; }
+  .opts { display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:12px; }
+  .opts .wide { grid-column:1 / -1; }
+  .group { display:flex; flex-direction:column; gap:13px; }
+  .pill { display:inline-block; font-size:10px; font-weight:800; padding:2px 8px; border-radius:20px; background:var(--line2); color:var(--text); text-transform:uppercase; letter-spacing:.3px; }
+  .pill.twitch { background:var(--accent); } .pill.youtube { background:var(--yt); }
+  .pill.ok { background:#12352a; color:var(--ok); } .pill.no { background:#3a2226; color:#ff9b9b; }
+  .pill.live { background:var(--rec); } .pill.off { background:var(--line2); color:var(--dim); }
+  .err { color:var(--err); white-space:pre-wrap; font-size:13px; }
+  .hint { color:var(--dim); font-size:12px; }
+  .hidden { display:none !important; }
+  .muted { color:var(--dim); }
+  .ell { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+
+  /* media card (fetched video / live channel) */
+  .info { display:flex; gap:18px; flex-wrap:wrap; } .info > div:last-child { flex:1 1 260px; }
+  .info .th { width:240px; max-width:100%; aspect-ratio:16/9; border-radius:10px; background:#000 center/cover; flex-shrink:0; position:relative; overflow:hidden; }
+  .info .th .dur { position:absolute; right:7px; bottom:7px; background:#000c; font-size:11px; font-weight:700; padding:1px 6px; border-radius:4px; }
+  .info h3 { margin:6px 0 4px; font-size:16px; line-height:1.3; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+  .meta { color:var(--dim); font-size:13px; display:flex; flex-wrap:wrap; gap:4px 12px; }
+  .stats { display:flex; flex-wrap:wrap; gap:8px 22px; margin-top:12px; }
+  .stats div { display:flex; flex-direction:column; } .stats b { font-size:15px; } .stats span { font-size:11px; color:var(--dim); }
+  .welcome { display:flex; gap:18px; align-items:center; padding:22px; border-style:dashed; background:transparent; }
+  .welcome .big { font-size:30px; width:64px; height:64px; border-radius:16px; display:grid; place-items:center; background:#9b5cff1a; flex-shrink:0; }
+  .welcome ul { margin:6px 0 0; padding-left:18px; color:var(--dim); }
+
+  /* trim timeline with chat activity */
+  .trim { position:relative; height:46px; border-radius:9px; background:var(--s1); border:1px solid var(--line2); overflow:hidden; touch-action:none; cursor:crosshair; user-select:none; }
+  .trim svg { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }
+  .trim .sel { position:absolute; top:0; bottom:0; background:#9b5cff26; border-left:3px solid var(--accent); border-right:3px solid var(--accent); cursor:grab; }
+  .trim .sel.full { background:transparent; border-color:transparent; }
+  .trim .hd { position:absolute; top:0; bottom:0; width:14px; margin-left:-7px; cursor:ew-resize; z-index:2; }
+  .trim .hd::after { content:""; position:absolute; left:4px; top:50%; width:6px; height:18px; margin-top:-9px; border-radius:3px; background:#fff; box-shadow:0 1px 4px #0008; }
+  .trimrow { display:flex; align-items:center; gap:8px; }
+  .trimrow input { width:96px; padding:6px 9px; text-align:center; font-variant-numeric:tabular-nums; }
+
+  /* chat style picker (thumbnails of presets) */
+  .stylepick { display:grid; grid-template-columns:repeat(auto-fill, minmax(92px,1fr)); gap:8px; }
+  .sp-item { border:1px solid var(--line2); border-radius:9px; background:var(--s1); padding:4px; cursor:pointer; text-align:left; font:inherit; color:var(--text); }
+  .sp-item.on { border-color:var(--accent); box-shadow:0 0 0 2px #9b5cff55; }
+  .sp-item .mini { position:relative; aspect-ratio:16/9; border-radius:5px; overflow:hidden; background:linear-gradient(135deg,#2a2440,#141a2c 60%,#0f2a2a); }
+  .sp-item .mini i { position:absolute; display:block; }
+  .sp-item .nm { font-size:11px; font-weight:600; padding:4px 2px 1px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+
+  /* download page: section card is the main box, output options in one slim row */
+  .sect { padding:18px; gap:12px; border-color:#9b5cff40; }
+  .sect .trim { height:120px; border-radius:11px; }
+  .ticks { position:relative; height:14px; font-size:10px; color:var(--dim); font-variant-numeric:tabular-nums; margin-top:-6px; }
+  .ticks span { position:absolute; transform:translateX(-50%); white-space:nowrap; }
+  .ticks span:first-child { transform:none; } .ticks span:last-child { transform:translateX(-100%); }
+  .outrow { display:flex; align-items:center; flex-wrap:wrap; gap:10px 14px; padding:11px 16px; }
+  .outrow .tog { flex:none; font-weight:600; }
+  .outrow .qsel { width:auto; min-width:150px; padding:6px 10px; }
+  .vsep { width:1px; align-self:stretch; background:var(--line2); margin:0 4px; }
+  .chips.sm .chip { padding:4px 10px; font-size:11px; }
+  /* youtube to mp3 */
+  .alist { display:flex; flex-direction:column; gap:8px; }
+  .arow { display:flex; align-items:center; gap:12px; padding:8px 10px; background:var(--s2); border:1px solid var(--line); border-radius:11px; }
+  .arow .th { width:96px; aspect-ratio:16/9; border-radius:6px; background:#000 center/cover; flex-shrink:0; position:relative; }
+  .arow .th span { position:absolute; right:3px; bottom:3px; background:#000c; font-size:10px; font-weight:700; padding:0 4px; border-radius:3px; }
+  .arow .t { font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .arow .m { font-size:12px; color:var(--dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .arow.bad .m { color:var(--err); }
+  .arow .x { background:none; border:none; color:var(--dim); cursor:pointer; font-size:15px; padding:0 6px; }
+  .arow .x:hover { color:var(--err); }
+  #aRate { width:auto; }
+
+  /* audio converter */
+  .drop { border:2px dashed var(--line2); border-radius:14px; padding:26px; text-align:center; color:var(--dim); transition:border-color .15s, background .15s; display:flex; flex-direction:column; align-items:center; gap:8px; }
+  .drop.over { border-color:var(--accent); background:#9b5cff14; color:var(--text); }
+  .drop b { color:var(--text); }
+  .drop .big { font-size:26px; width:56px; height:56px; border-radius:14px; display:grid; place-items:center; background:#9b5cff1a; }
+  .flist { display:flex; flex-direction:column; gap:6px; }
+  .frow { display:flex; align-items:center; gap:10px; padding:9px 11px; background:var(--s2); border:1px solid var(--line); border-radius:10px; }
+  .frow .nm { font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .frow .dt { color:var(--dim); font-size:12px; }
+  .frow .x { background:none; border:none; color:var(--dim); cursor:pointer; font-size:15px; padding:0 4px; }
+  .frow .x:hover { color:var(--err); }
+  .frow.bad .dt { color:var(--err); }
+  .fmtbadge { font-size:10px; font-weight:800; padding:3px 6px; border-radius:5px; background:var(--s3); flex-shrink:0; min-width:46px; text-align:center; }
+  .fmtbadge.ll { background:#12352a; color:var(--ok); }
+  .convgrid { display:grid; grid-template-columns:minmax(0,1.35fr) minmax(300px,1fr); gap:16px; align-items:start; }
+
+  /* browse */
+  .grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(200px,1fr)); gap:14px; }
+  .vod { background:var(--s2); border:1px solid var(--line); border-radius:12px; overflow:hidden; cursor:pointer; position:relative; transition:border-color .12s; }
+  .vod:hover { border-color:var(--line2); }
+  .vod.sel { border-color:var(--accent); box-shadow:0 0 0 1px var(--accent); }
+  .vod img { width:100%; aspect-ratio:16/9; object-fit:cover; display:block; background:#000; }
+  .vod .dur { position:absolute; top:7px; right:7px; background:#000c; font-size:11px; font-weight:700; padding:1px 6px; border-radius:4px; }
+  .vod .tick { position:absolute; top:7px; left:7px; width:20px; height:20px; border-radius:6px; background:#000a; border:2px solid #fff8; }
+  .vod.sel .tick { background:var(--accent); border-color:var(--accent); }
+  .vod.sel .tick::after { content:"✓"; position:absolute; inset:0; display:grid; place-items:center; font-size:12px; font-weight:800; }
+  .vod .t { padding:8px 10px 2px; font-size:13px; font-weight:600; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+  .vod .m { padding:0 10px 9px; font-size:11px; color:var(--dim); }
+
+  /* queue rail */
+  .queue { background:var(--s1); border-left:1px solid var(--line); display:flex; flex-direction:column; min-height:0; }
+  .qh { padding:18px 16px 10px; display:flex; align-items:center; gap:8px; }
+  .qh h3 { margin:0; font-size:15px; flex:1; }
+  .seg { display:flex; background:var(--bg); border:1px solid var(--line2); border-radius:9px; padding:3px; gap:3px; }
+  .seg button { flex:1; background:none; border:none; color:var(--dim); font:inherit; font-size:12px; font-weight:600; padding:6px 6px; border-radius:6px; cursor:pointer; white-space:nowrap; }
+  .seg button.on { background:var(--s3); color:var(--text); box-shadow:0 1px 3px #0006; }
+  .qtabs { margin:0 16px 10px; }
+  #jobs { flex:1; overflow:auto; padding:0 12px 14px; }
+  .job { border:1px solid var(--line); background:var(--s2); border-radius:11px; padding:10px; margin-bottom:8px; display:flex; gap:10px; }
+  .job .noteimg { align-self:flex-start; width:72px; aspect-ratio:16/9; border-radius:6px; background:linear-gradient(135deg,#0f3b2c,#111116); flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:18px; }
+  .job img { align-self:flex-start; width:72px; aspect-ratio:16/9; object-fit:cover; border-radius:6px; background:#000; flex-shrink:0; }
+  .job .body { flex:1; min-width:0; }
+  .job .title { font-weight:600; font-size:12.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .bar { height:5px; background:var(--line); border-radius:4px; overflow:hidden; margin:7px 0 5px; }
+  .bar > div { height:100%; background:linear-gradient(90deg,#7c3aed,#b085ff); border-radius:4px; transition:width .4s; }
+  .job.done .bar > div { background:var(--ok); } .job.error .bar > div { background:var(--err); }
+  .job .stat { font-size:11.5px; color:var(--dim); display:flex; gap:8px; flex-wrap:wrap; }
+  .job .stat b { color:var(--text); font-weight:600; }
+  .job.error .stat b { color:var(--err); } .job.done .stat b { color:var(--ok); }
+  .job .acts { display:flex; gap:5px; margin-top:7px; flex-wrap:wrap; }
+  .job .acts .btn.sm { padding:4px 8px; font-size:11.5px; }
+  .job .err { font-size:12px; margin-top:4px; }
+  .files { margin-top:5px; font-size:12px; display:flex; flex-direction:column; gap:1px; }
+  .files a { color:var(--link); cursor:pointer; text-decoration:none; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .files a:hover { text-decoration:underline; }
+  .empty { color:var(--dim); text-align:center; padding:40px 10px; }
+  .empty .big { font-size:26px; margin-bottom:6px; opacity:.6; }
+  .job.live .bar > div { background:var(--rec); }
+  .job.live.recording .bar > div { width:100% !important; animation:pulse 1.6s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity:.35; } }
+
+  /* chat style editor */
+  .styler { display:grid; grid-template-columns:320px minmax(0,1fr); gap:22px; align-items:start; }
+  .controls { display:flex; flex-direction:column; gap:13px; }
+  .controls .field > span { display:flex; justify-content:space-between; }
+  .controls .field > span b { color:var(--text); font-weight:600; }
+  input[type=range] { width:100%; accent-color:var(--accent); }
+  input[type=color] { width:100%; height:36px; padding:2px; background:var(--s1); border:1px solid var(--line2); border-radius:8px; cursor:pointer; }
+  .seg.opt { background:var(--s1); }
+  .seg.opt button.on { background:var(--accent); color:#fff; }
+  .pos-grid { display:grid; grid-template-columns:repeat(3, 34px); gap:4px; }
+  .pos-grid button { height:24px; border-radius:5px; background:var(--s1); border:1px solid var(--line2); cursor:pointer; }
+  .pos-grid button.on { background:var(--accent); border-color:var(--accent); }
+  .toggles { display:grid; grid-template-columns:1fr 1fr; gap:9px 12px; }
+  .stage-wrap { position:sticky; top:0; }
+  .stage { position:relative; width:100%; aspect-ratio:16 / 9; background:#000; border-radius:10px; overflow:hidden; border:1px solid var(--line2); }
+  .stage .bg { position:absolute; background:linear-gradient(135deg,#2a2440,#141a2c 60%,#0f2a2a); background-size:cover; background-position:center; }
+  .chatbox { position:absolute; }
+  .chatbox img.chat { position:absolute; inset:0; width:100%; height:100%; display:block; cursor:grab; user-select:none; -webkit-user-drag:none; touch-action:none; }
+  .chatbox:hover { outline:2px dashed #bf94ffaa; outline-offset:-2px; }
+  .stage.dragging .chatbox, .stage.resizing .chatbox { outline:2px solid var(--accent); outline-offset:-2px; }
+  .stage.dragging img.chat { cursor:grabbing; }
+  .stage.resizing img.chat { object-fit:cover; object-position:left bottom; }
+  .chatbox .h { position:absolute; width:12px; height:12px; background:#fff; border:2px solid var(--accent); border-radius:3px; opacity:0; transition:opacity .15s; touch-action:none; z-index:2; }
+  .chatbox:hover .h, .stage.resizing .h { opacity:1; }
+  .chatbox .h[data-h=nw] { left:-6px; top:-6px; cursor:nwse-resize; } .chatbox .h[data-h=se] { right:-6px; bottom:-6px; cursor:nwse-resize; }
+  .chatbox .h[data-h=ne] { right:-6px; top:-6px; cursor:nesw-resize; } .chatbox .h[data-h=sw] { left:-6px; bottom:-6px; cursor:nesw-resize; }
+  .chatbox .h[data-h=n] { left:calc(50% - 6px); top:-6px; cursor:ns-resize; } .chatbox .h[data-h=s] { left:calc(50% - 6px); bottom:-6px; cursor:ns-resize; }
+  .chatbox .h[data-h=w] { top:calc(50% - 6px); left:-6px; cursor:ew-resize; } .chatbox .h[data-h=e] { top:calc(50% - 6px); right:-6px; cursor:ew-resize; }
+  .chatbox.side .h:not(.edge) { display:none; }
+  .chatbox .sizetag { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); background:#000c; color:#fff; font-size:11px; padding:2px 7px; border-radius:10px; display:none; white-space:nowrap; }
+  .stage.resizing .sizetag { display:block; }
+  .busy { position:absolute; right:10px; top:10px; font-size:11px; background:#000a; padding:2px 8px; border-radius:10px; opacity:0; transition:opacity .2s; pointer-events:none; }
+  .busy.on { opacity:1; }
+  .drop-hint { position:absolute; top:0; bottom:0; width:50%; background:#9b5cff22; display:none; pointer-events:none; }
+  .stage.dragging.side .drop-hint { display:block; }
+  .presetbar { display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding:10px 12px; background:var(--s2); border:1px solid var(--line); border-radius:12px; }
+  .presetbar select { width:auto; min-width:230px; padding:6px 30px 6px 10px; }
+  .presetbar input { width:210px; padding:6px 10px; }
+  .presetbar .tag { font-size:11px; color:var(--warn); }
+  dialog { background:var(--s2); color:var(--text); border:1px solid var(--line2); border-radius:16px; width:min(560px, 92vw); padding:22px; box-shadow:0 30px 80px #000a; }
+  dialog::backdrop { background:#000a; backdrop-filter:blur(3px); }
+  dialog h2 { font-size:16px; color:var(--text); text-transform:none; letter-spacing:0; margin-bottom:16px; }
+  dialog .field { margin-bottom:14px; }
+
+  @media (max-width: 1400px) { .app { grid-template-columns:192px minmax(0,1fr) 310px; } .app.full { grid-template-columns:192px minmax(0,1fr); } .info .th { width:240px; } }
+  @media (max-width: 1180px) {
+    .app { grid-template-columns:62px minmax(0,1fr) 300px; } .app.full { grid-template-columns:62px minmax(0,1fr); }
+    .side { padding:14px 8px; align-items:center; } .logo { padding:2px 0 14px; }
+    .side .nav > span:not(.i):not(.badge), .logo > span, .disk, .upd { display:none; }
+    .nav { justify-content:center; padding:10px 0; position:relative; } .nav .badge { position:absolute; top:3px; right:4px; margin:0; }
+    .side .sep { width:30px; }
+  }
+  @media (max-width: 1000px) {
+    .app, .app.full { grid-template-columns:62px minmax(0,1fr); grid-template-rows:minmax(0,1fr) clamp(150px, 30vh, 240px); }
+    .app.full { grid-template-rows:minmax(0,1fr); }
+    .side { grid-row:1 / -1; } .view { grid-column:2; grid-row:1; }
+    .queue { grid-column:2; grid-row:2; border-left:none; border-top:1px solid var(--line); }
+    .qh { padding:10px 16px 6px; } .styler, .convgrid { grid-template-columns:1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="side">
+    <div class="logo"><div class="mark">▼</div><span>Stream<em>Grab</em></span></div>
+    <button class="nav on" data-tab="download"><span class="i">⬇︎</span><span>Download</span></button>
+    <button class="nav" data-tab="audio"><span class="i">♪</span><span>YouTube to MP3</span></button>
+    <button class="nav" data-tab="browse"><span class="i">▦</span><span>Browse channel</span></button>
+    <button class="nav" data-tab="live"><span class="i">●</span><span>Live</span><span class="badge hidden" id="liveBadge"></span></button>
+    <button class="nav" data-tab="convert"><span class="i">♫</span><span>Convert audio</span></button>
+    <button class="nav" data-tab="style"><span class="i">✎</span><span>Chat style</span></button>
+    <div class="sep"></div>
+    <button class="nav" id="openFolder" title="Open the download folder"><span class="i">📁</span><span>Open folder</span></button>
+    <button class="nav" id="settingsBtn"><span class="i">⚙︎</span><span>Settings</span></button>
+    <a class="upd hidden" id="updNote" target="_blank" rel="noopener" title="Open the download page"><b>Update available</b><span id="updVer"></span></a>
+    <div class="disk" id="disk" title="Open the download folder">
+      <div class="hint">Downloads folder</div>
+      <div class="p" id="diskPath">…</div>
+      <div class="bar"><div id="diskBar" style="width:0"></div></div>
+      <div class="hint" id="diskFree"></div>
+    </div>
+  </aside>
+
+  <!-- DOWNLOAD -->
+  <section class="view" id="tab-download">
+    <div class="vhead"><h1>Download</h1></div>
+    <div class="vbody">
+      <div class="urlbox">
+        <textarea id="url" class="grow" rows="1" placeholder="Paste a Twitch or YouTube link (one per line for a batch)"></textarea>
+        <button class="btn sec" id="fetchBtn" style="padding:11px 16px">Fetch info</button>
+      </div>
+      <div id="fetchErr" class="err hidden"></div>
+      <div class="card welcome" id="welcome">
+        <div class="big">🔗</div>
+        <div><b>Paste a link to get started</b>
+          <ul><li>Twitch VODs, highlights, clips and uploads; YouTube videos and past livestreams</li>
+            <li>Pick the quality, trim a section, and save the chat (or bake it into the video)</li>
+            <li>Just the sound? Use the <b>YouTube to MP3</b> page.</li>
+            <li>Several links at once? Put one per line and press Download.</li></ul></div>
+      </div>
+      <div id="info" class="card info hidden"></div>
+
+      <div class="card group sect">
+        <div class="row"><span class="lbl grow">Section</span><span class="hint" id="trimLen"></span><a class="link hidden" id="trimAll">Whole video</a></div>
+        <div class="trim hidden" id="trim"><svg id="trimGraph" viewBox="0 0 100 40" preserveAspectRatio="none"></svg>
+          <div class="sel full" id="trimSel"></div><div class="hd" id="trimA"></div><div class="hd" id="trimZ"></div></div>
+        <div class="ticks hidden" id="trimTicks"></div>
+        <div class="trimrow"><span class="hint">From</span><input type="text" id="start" placeholder="0:00:00"><span class="hint">to</span><input type="text" id="end" placeholder="end"><span class="grow"></span><span class="hint" id="trimHint">Leave empty for the whole video. Times are h:mm:ss.</span></div>
+      </div>
+
+      <div class="card outrow">
+        <label class="tog"><input type="checkbox" class="sw" id="optVideo" checked><span>Video</span></label>
+        <select id="quality" class="qsel"></select>
+        <span class="vsep"></span>
+        <label class="tog"><input type="checkbox" class="sw" id="optChat" checked><span>Chat</span></label>
+        <div class="chips sm" title="The HTML replay plays next to the video with chat scrolling in sync.">
+          <label class="chip"><input type="checkbox" class="cf" value="json" checked>JSON</label>
+          <label class="chip"><input type="checkbox" class="cf" value="txt" checked>TXT</label>
+          <label class="chip"><input type="checkbox" class="cf" value="html" checked>HTML replay</label>
+        </div>
+      </div>
+
+      <div class="card group">
+        <div class="row"><label class="tog grow"><span><b>Bake chat into the video</b><small>Render chat onto the MP4 in the style you pick</small></span><input type="checkbox" class="sw" id="optBurn"></label></div>
+        <div class="stylepick" id="optPick"></div>
+        <select class="preset-pick hidden" id="optPreset"></select>
+        <div class="row"><label class="tog grow"><span class="hint" style="color:var(--text)">Keep the original video too</span><input type="checkbox" class="sw" id="optKeep"></label><a href="#" class="gostyle link">Edit chat style →</a></div>
+      </div>
+    </div>
+    <div class="actbar">
+      <div class="sum"><b id="dlSum">Nothing to download yet</b><span id="dlSub">Paste a link above.</span></div>
+      <button class="btn sec folderbtn" id="dlDir" title="Choose where this download is saved"><span>📁</span><span class="ell dirtxt" id="dlDirTxt">Download folder</span></button>
+      <button class="btn lg" id="dlBtn">⬇︎ Download</button>
+    </div>
+  </section>
+
+  <!-- YOUTUBE TO MP3 -->
+  <section class="view hidden" id="tab-audio">
+    <div class="vhead"><h1>YouTube to MP3</h1></div>
+    <div class="vbody">
+      <div class="urlbox">
+        <textarea id="aUrl" class="grow" rows="1" placeholder="Paste YouTube links (one per line). Twitch works too."></textarea>
+        <button class="btn sec" id="aAdd" style="padding:11px 16px">Add</button>
+      </div>
+      <div id="aErr" class="err hidden"></div>
+      <div class="card welcome" id="aWelcome"><div class="big">♪</div><div><b>Save the sound from a video</b>
+        <div class="hint" style="margin-top:4px">Paste one or more links and pick a format. MP3 and M4A files get the title, channel and thumbnail as tags and cover art.</div></div></div>
+      <div class="row hidden" id="aBar"><b class="grow" id="aCount"></b><a class="link" id="aClear">Clear list</a></div>
+      <div class="alist" id="aList"></div>
+
+      <div class="card group">
+        <div class="lbl">Format</div>
+        <div class="seg opt" id="aFmt">
+          <button data-f="mp3">MP3</button><button data-f="wav">WAV</button><button data-f="flac">FLAC</button>
+          <button data-f="m4a">M4A</button><button data-f="opus">Opus</button>
+        </div>
+        <div class="row" id="aMp3Row"><span class="hint">Bitrate</span>
+          <div class="seg" id="aRate"><button data-r="mp3">320 kbps</button><button data-r="mp3-192">192 kbps</button></div></div>
+        <div class="hint" id="aFmtHint"></div>
+      </div>
+    </div>
+    <div class="actbar">
+      <div class="sum"><b id="aSum">No links added</b><span id="aSub">Paste a link above.</span></div>
+      <button class="btn sec folderbtn" id="aDir" title="Choose where the audio is saved"><span>📁</span><span class="ell dirtxt">Download folder</span></button>
+      <button class="btn lg" id="aBtn" disabled>⬇︎ Download audio</button>
+    </div>
+  </section>
+
+  <!-- BROWSE -->
+  <section class="view hidden" id="tab-browse">
+    <div class="vhead"><h1>Browse a channel</h1></div>
+    <div class="vbody">
+      <div class="urlbox">
+        <select id="bPlat" style="width:130px"><option value="twitch">Twitch</option><option value="youtube">YouTube</option></select>
+        <input type="text" id="bQuery" class="grow" placeholder="Channel name, @handle or URL">
+        <select id="bTab" style="width:180px"></select>
+        <button class="btn sec" id="bBtn" style="padding:11px 16px">Search</button>
+      </div>
+      <div id="bErr" class="err hidden"></div>
+      <div class="row hidden" id="bBar"><b id="bTitle" class="grow"></b><span class="hint hidden" id="bHint">Click to select · double-click to open one right away</span></div>
+      <div class="grid" id="bGrid"></div>
+      <div class="card welcome" id="bWelcome"><div class="big">▦</div><div><b>Find a channel's videos</b><div class="hint" style="margin-top:4px">List past broadcasts, highlights or uploads from Twitch, or streams, videos and shorts from YouTube. Pick one or more and open them in the Download page, where you choose the section, quality and chat options.</div></div></div>
+    </div>
+    <div class="actbar">
+      <div class="sum"><b id="bSum">No videos selected</b><span>Nothing downloads yet: you'll set the options on the Download page.</span></div>
+      <button class="btn sec" id="bAll">Select all</button>
+      <button class="btn lg" id="bQueue" disabled>Open in Download →</button>
+    </div>
+  </section>
+
+  <!-- LIVE -->
+  <section class="view hidden" id="tab-live">
+    <div class="vhead"><h1>Record a live stream</h1></div>
+    <div class="vbody">
+      <div class="urlbox">
+        <select id="lPlat" style="width:130px"><option value="twitch">Twitch</option><option value="youtube">YouTube</option></select>
+        <input type="text" id="lQuery" class="grow" placeholder="Channel name or URL">
+        <button class="btn sec" id="lCheck" style="padding:11px 16px">Check status</button>
+      </div>
+      <div id="lErr" class="err hidden"></div>
+      <div class="card welcome" id="lWelcome"><div class="big">●</div><div><b>Record a channel while it's live</b><div class="hint" style="margin-top:4px">Enter a channel and check whether it's live. If it's offline, StreamGrab can wait and start recording as soon as the stream begins. Twitch recordings save the live chat too, kept in sync with the video.</div></div></div>
+      <div id="lInfo" class="card info hidden"></div>
+      <div class="grid3">
+        <div class="card group">
+          <div class="lbl">Recording</div>
+          <label class="field"><span>Quality</span><select id="lQuality"></select></label>
+          <label class="tog"><span>If offline, wait for the stream to start</span><input type="checkbox" class="sw" id="lWait"></label>
+          <label class="tog yt-only hidden"><span>Record from the beginning of the stream</span><input type="checkbox" class="sw" id="lFromStart"></label>
+        </div>
+        <div class="card group tw-only">
+          <div class="lbl">Chat</div>
+          <label class="tog"><span>Record chat</span><input type="checkbox" class="sw" id="lChat" checked></label>
+          <div class="hint">Chat files use the formats chosen on the Download page.</div>
+        </div>
+        <div class="card group tw-only">
+          <div class="lbl">Bake chat into the video</div>
+          <label class="tog"><span>Render chat on when the recording ends</span><input type="checkbox" class="sw" id="lBurn"></label>
+          <div class="stylepick" id="lPick"></div>
+          <select class="preset-pick hidden" id="lPreset"></select>
+          <label class="tog"><span class="hint" style="color:var(--text)">Keep the original video too</span><input type="checkbox" class="sw" id="lKeep" checked></label>
+        </div>
+      </div>
+    </div>
+    <div class="actbar">
+      <div class="sum"><b id="lSum">Records until the stream ends</b><span>or until you press Stop &amp; save in the queue.</span></div>
+      <button class="btn sec folderbtn" id="lDir" title="Choose where recordings are saved"><span>📁</span><span class="ell dirtxt">Download folder</span></button>
+      <button class="btn lg rec" id="lRec">● Start recording</button>
+    </div>
+  </section>
+
+  <!-- CONVERT -->
+  <section class="view hidden" id="tab-convert">
+    <div class="vhead"><h1>Convert audio</h1><button class="btn sec sm hidden" id="cClear">Clear list</button></div>
+    <div class="vbody">
+      <div class="convgrid">
+        <div class="group">
+          <div class="drop" id="cDrop">
+            <div class="big">🎵</div>
+            <div><b>Drop audio files here</b> or <button class="btn sec sm" id="cPick">Choose files…</button></div>
+            <div class="hint">MP3, FLAC, WAV, AIFF, OGG, Opus, AAC/M4A, ALAC, WMA… Video files work too (the audio is extracted).</div>
+            <input type="file" id="cInput" multiple class="hidden">
+          </div>
+          <div class="flist" id="cList"></div>
+        </div>
+        <div class="card group">
+          <div class="lbl">Output</div>
+          <div class="opts">
+            <label class="field wide"><span>Convert to</span><select id="cFmt"></select></label>
+            <label class="field wide" id="cQualF"><span>Quality</span><select id="cQual"></select></label>
+            <label class="field wide hidden" id="cDepthF"><span>Bit depth</span>
+              <select id="cDepth">
+                <option value="auto">Match the original</option>
+                <option value="16">16-bit (CD)</option>
+                <option value="24">24-bit</option>
+                <option value="32f" class="wav-only">32-bit float</option>
+              </select></label>
+            <label class="field"><span>Sample rate</span>
+              <select id="cRate">
+                <option value="">Keep original</option>
+                <option value="44100">44.1 kHz</option>
+                <option value="48000">48 kHz</option>
+                <option value="88200">88.2 kHz</option>
+                <option value="96000">96 kHz</option>
+              </select></label>
+            <label class="field"><span>Channels</span>
+              <select id="cCh">
+                <option value="">Keep original</option>
+                <option value="2">Stereo</option>
+                <option value="1">Mono</option>
+              </select></label>
+            <label class="field wide"><span>Save to</span>
+              <select id="cDest">
+                <option value="same">Same folder as the original</option>
+                <option value="folder">StreamGrab folder › Converted</option>
+                <option value="custom">A folder I choose…</option>
+              </select></label>
+            <div class="wide row hidden" id="cFolderRow">
+              <input type="text" id="cFolder" class="grow" placeholder="e.g. ~/Music/Converted">
+              <button type="button" class="btn sec hidden" id="cFolderPick">Choose…</button>
+            </div>
+            <label class="tog wide"><span>Keep tags and cover art</span><input type="checkbox" class="sw" id="cCover" checked></label>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="actbar">
+      <div class="sum"><b id="cSum">No files added</b><span id="cHint"></span></div>
+      <button class="btn lg" id="cBtn" disabled>Convert</button>
+    </div>
+  </section>
+
+  <!-- CHAT STYLE -->
+  <section class="view hidden" id="tab-style">
+    <div class="vhead"><h1>Chat style</h1><span class="hint" id="stSaved"></span><button class="btn sec sm" id="stReset">Reset to default</button></div>
+    <div class="vbody">
+      <div class="presetbar">
+        <span class="hint">Preset</span>
+        <select id="pSel"></select>
+        <span class="tag hidden" id="pDirty">● edited</span>
+        <button class="btn sec sm hidden" id="pUpdate" title="Save the current look into this preset">Update preset</button>
+        <button class="btn sec sm hidden" id="pDelete">Delete</button>
+        <span class="grow"></span>
+        <span class="row hidden" id="pSaveBox" style="gap:6px">
+          <input type="text" id="pName" placeholder="Preset name" maxlength="60">
+          <button class="btn sm" id="pSaveOk">Save</button>
+          <button class="btn sec sm" id="pSaveCancel">Cancel</button>
+        </span>
+        <button class="btn sm" id="pSaveAs">＋ Save as preset</button>
+      </div>
+      <div class="styler">
+        <div class="card controls">
+          <div class="field"><span>Layout</span>
+            <div class="seg opt" id="stLayout">
+              <button data-v="side-left">Panel left</button><button data-v="side-right">Panel right</button><button data-v="overlay">Overlay</button>
+            </div>
+          </div>
+          <label class="field"><span>Panel width <b data-out="width"></b></span><input type="range" data-k="width" min="10" max="50" step="any"></label>
+          <div class="ov-only controls">
+            <label class="field"><span>Panel height <b data-out="height"></b></span><input type="range" data-k="height" min="15" max="100" step="any"></label>
+            <div class="row" style="align-items:flex-start; gap:16px">
+              <div class="field"><span>Position</span>
+                <div class="pos-grid" id="stPos">
+                  <button data-x="2" data-y="4"></button><button data-x="50" data-y="4"></button><button data-x="98" data-y="4"></button>
+                  <button data-x="2" data-y="50"></button><button data-x="50" data-y="50"></button><button data-x="98" data-y="50"></button>
+                  <button data-x="2" data-y="96"></button><button data-x="50" data-y="96"></button><button data-x="98" data-y="96"></button>
+                </div>
+              </div>
+              <div class="grow controls" style="gap:6px">
+                <label class="field"><span>Horizontal <b data-out="x"></b></span><input type="range" data-k="x" min="0" max="100" step="any"></label>
+                <label class="field"><span>Vertical <b data-out="y"></b></span><input type="range" data-k="y" min="0" max="100" step="any"></label>
+              </div>
+            </div>
+          </div>
+          <label class="field"><span>Font</span><select data-k="font_family" id="stFont"><option>System</option></select></label>
+          <label class="field"><span>Font size <b data-out="font_size"></b></span><input type="range" data-k="font_size" min="12" max="60"></label>
+          <div class="row">
+            <label class="field grow"><span>Text color</span><input type="color" data-k="text_color"></label>
+            <label class="field grow"><span>Background</span><input type="color" data-k="bg_color"></label>
+          </div>
+          <label class="field"><span>Background opacity <b data-out="bg_opacity"></b></span><input type="range" data-k="bg_opacity" min="0" max="100"></label>
+          <label class="field"><span>Corner radius <b data-out="radius"></b></span><input type="range" data-k="radius" min="0" max="40"></label>
+          <div class="toggles">
+            <label class="chk"><input type="checkbox" class="sw" data-k="show_badges"> Badges</label>
+            <label class="chk"><input type="checkbox" class="sw" data-k="show_emotes"> Emotes</label>
+            <label class="chk" title="Twitch's own animated emotes"><input type="checkbox" class="sw" data-k="animate_twitch"> Animated emotes</label>
+            <label class="chk" title="Animated BTTV / FFZ / 7TV emotes"><input type="checkbox" class="sw" data-k="animate"> Animated GIFs</label>
+            <label class="chk"><input type="checkbox" class="sw" data-k="third_party"> BTTV / FFZ / 7TV</label>
+            <label class="chk"><input type="checkbox" class="sw" data-k="timestamps"> Timestamps</label>
+            <label class="chk"><input type="checkbox" class="sw" data-k="shadow"> Text shadow</label>
+          </div>
+        </div>
+        <div class="stage-wrap">
+          <div class="stage" id="stStage"><div class="bg" id="stBg"></div><div class="drop-hint" id="stDrop"></div><div class="chatbox" id="stBox"><img class="chat" id="stChat" alt="">
+              <span class="h" data-h="nw"></span><span class="h" data-h="n"></span><span class="h" data-h="ne"></span><span class="h" data-h="e"></span>
+              <span class="h" data-h="se"></span><span class="h" data-h="s"></span><span class="h" data-h="sw"></span><span class="h" data-h="w"></span>
+              <span class="sizetag" id="stSize"></span></div><span class="busy" id="stBusy">rendering…</span></div>
+          <div class="row" style="margin-top:10px; gap:10px">
+            <button class="btn sec sm hidden" id="stNextFrame" title="Show a different frame from the video">↻ Different frame</button>
+            <span class="hint" id="stBgNote"></span>
+          </div>
+          <div class="row" style="margin-top:6px; justify-content:space-between; flex-wrap:wrap">
+            <span class="hint" id="stSrc"></span>
+            <label class="row" style="gap:8px"><span class="hint">Preview chat at</span><input type="text" id="stAt" placeholder="auto" style="width:90px; padding:6px 9px"></label>
+          </div>
+          <div class="hint" style="margin-top:10px"><b>Tip:</b> drag the chat to move it, and drag its handles to resize it. In panel layouts, drag the panel to the other side to switch sides, or drag its inner edge to change its width.</div>
+          <div class="hint" style="margin-top:6px">The preview is drawn by the same renderer that bakes chat into your video. The style is saved automatically and used for every new download, recording and re-render.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- QUEUE -->
+  <aside class="queue">
+    <div class="qh"><h3>Queue</h3><button class="ghost" id="clearBtn">Clear finished</button></div>
+    <div class="seg qtabs" id="qTabs"><button data-q="active" class="on">Active</button><button data-q="done">Finished</button></div>
+    <div id="jobs"><div class="empty">Nothing here yet.</div></div>
+  </aside>
+</div>
+
+<dialog id="settings">
+  <h2>Settings <span class="hint" id="sVersion" style="font-weight:400; text-transform:none; letter-spacing:0"></span></h2>
+  <label class="field"><span>Download folder</span>
+    <div class="row"><input type="text" id="sDir" class="grow"><button type="button" class="btn sec hidden" id="sPick">Choose…</button></div>
+  </label>
+  <label class="tog" style="margin-bottom:14px"><span>Put downloads in a subfolder per channel</span><input type="checkbox" class="sw" id="sSub"></label>
+  <div class="row" style="align-items:flex-end">
+    <label class="field grow"><span>Parallel jobs (restart to apply)</span><input type="text" id="sPar"></label>
+    <label class="field grow"><span>Video fragments in parallel</span><input type="text" id="sFrag"></label>
+    <label class="field grow"><span>Chat download threads</span><input type="text" id="sChat"></label>
+  </div>
+  <label class="field"><span>Baking chat into video</span>
+    <select id="sEnc">
+      <option value="fast">Fast: uses all CPU cores (about 2× quicker, smaller files)</option>
+      <option value="hardware">Hardware encoder: slower, leaves the CPU free</option>
+    </select>
+  </label>
+  <label class="field"><span>Parallel connections for trimmed Twitch downloads</span><input type="text" id="sConn"></label>
+  <div class="row" style="justify-content:flex-end; margin-top:8px">
+    <button class="btn sec" id="sCancel">Cancel</button>
+    <button class="btn" id="sSave">Save</button>
+  </div>
+</dialog>
+
+<script>
+const $ = s => document.querySelector(s);
+const api = async (path, body) => {
+  const r = await fetch(path, body === undefined ? {} : {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+  const j = await r.json();
+  if (!r.ok) throw new Error(j.error || r.statusText);
+  return j;
+};
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmtDur = s => { s = Math.floor(s || 0); const h = Math.floor(s/3600), m = Math.floor(s%3600/60), x = s%60;
+  return h ? `${h}:${String(m).padStart(2,'0')}:${String(x).padStart(2,'0')}` : `${m}:${String(x).padStart(2,'0')}`; };
+const base = p => p.split('/').pop();
+const fileLabel = p => {
+  if (p.endsWith('.chat.html')) return '💬 Chat replay (HTML)';
+  if (p.endsWith('.chat.json')) return '💬 Chat (JSON)';
+  if (p.endsWith('.chat.txt')) return '💬 Chat (TXT)';
+  if (p.endsWith('(with chat).mp4') || / \(with chat\) \(\d+\)\.mp4$/.test(p)) return '🎬 Video with chat';
+  return '🎬 ' + (/\.(m4a|mp3|opus|aac)$/.test(p) ? 'Audio' : 'Video') + ' (.' + p.split('.').pop() + ')';
+};
+
+/* ---------- tabs ---------- */
+function showTab(name) {
+  document.querySelectorAll('.nav[data-tab]').forEach(x => x.classList.toggle('on', x.dataset.tab === name));
+  ['download', 'audio', 'browse', 'live', 'style', 'convert'].forEach(t => $('#tab-' + t).classList.toggle('hidden', t !== name));
+  $('.app').classList.toggle('full', name === 'style');
+  if (name === 'style') openStyleEditor();
+}
+document.querySelectorAll('.nav[data-tab]').forEach(b => b.onclick = () => showTab(b.dataset.tab));
+document.querySelectorAll('.gostyle').forEach(a => a.onclick = e => { e.preventDefault(); showTab('style'); });
+const parseTime = v => { v = String(v || '').trim(); if (!v) return null; return v.split(':').reduce((a, x) => a * 60 + (+x || 0), 0); };
+
+/* ---------- download ---------- */
+let current = null, lastFetched = null;  // lastFetched survives clicking Download (used by the chat style preview)
+const GENERIC_Q = [['', 'Best available'], ['1080', '1080p'], ['720', '720p'], ['480', '480p'], ['360', '360p']];
+function setQualities(list) {
+  const sel = $('#quality');
+  sel.innerHTML = '';
+  const add = (v, l) => sel.add(new Option(l, v));
+  if (!list) { GENERIC_Q.forEach(([v, l]) => add(v, l)); return; }
+  add('', 'Best available');
+  list.forEach(q => add(`${q.height}|${q.fps}`, q.label));
+}
+setQualities(null);
+
+const urls = () => $('#url').value.split(/\s+/).map(s => s.trim()).filter(Boolean);
+$('#url').addEventListener('input', () => {
+  $('#url').style.height = 'auto'; $('#url').style.height = $('#url').scrollHeight + 2 + 'px';
+  if (current && urls()[0] !== current.url && urls()[0] !== current._input) clearInfo();
+  dlSummary();
+});
+function clearInfo() {
+  current = null; $('#info').classList.add('hidden'); $('#welcome').classList.remove('hidden');
+  setQualities(null); trimSetup(null); dlSummary();
+}
+$('#url').addEventListener('paste', () => setTimeout(() => { if (urls().length === 1) fetchInfo(); }, 0));
+
+async function fetchInfo() {
+  const u = urls();
+  if (u.length !== 1) { $('#fetchErr').textContent = u.length ? 'Fetch info works with one URL at a time — batch URLs can be downloaded directly.' : 'Paste a URL first.'; $('#fetchErr').classList.remove('hidden'); return; }
+  $('#fetchErr').classList.add('hidden');
+  $('#fetchBtn').disabled = true; $('#fetchBtn').textContent = 'Fetching…';
+  try {
+    current = await api('/api/info', {url: u[0]});
+    current._input = u[0];
+    lastFetched = current;
+    const i = current;
+    const best = i.qualities[0];
+    $('#info').innerHTML = `
+      <div class="th" style="background-image:url('${esc(i.thumbnail)}')">${i.is_live ? '<span class="dur" style="background:var(--rec)">LIVE</span>' : i.duration ? `<span class="dur">${fmtDur(i.duration)}</span>` : ''}</div>
+      <div style="min-width:0">
+        <div class="row" style="gap:6px; flex-wrap:wrap">
+          <span class="pill ${esc(i.platform)}">${esc(i.platform)}</span>
+          ${i.kind ? `<span class="pill">${esc(String(i.kind).replace(/^Twitch|^Youtube/i, '').replace(/Tab$/, '') || 'video')}</span>` : ''}
+          <span class="pill ${i.chat ? 'ok' : 'no'}">${i.chat ? 'chat available' : 'no chat replay'}</span>
+        </div>
+        <h3>${esc(i.title)}</h3>
+        <div class="meta"><span>${esc(i.channel)}</span>${i.upload_date ? `<span>${i.upload_date.replace(/(\d{4})(\d\d)(\d\d)/, '$1-$2-$3')}</span>` : ''}</div>
+        <div class="stats">
+          ${best ? `<div><b>${esc(best.label)}</b><span>best quality</span></div>` : ''}
+          <div><b>${i.is_live ? 'Live' : fmtDur(i.duration)}</b><span>length</span></div>
+          <div><b>${i.qualities.length}</b><span>quality options</span></div>
+          <div id="chatCount" class="hidden"><b></b><span>chat messages / min at peak</span></div>
+        </div>
+      </div>`;
+    $('#info').classList.remove('hidden'); $('#welcome').classList.add('hidden');
+    setQualities(i.qualities);
+    trimSetup(i);
+    dlSummary();
+  } catch (e) {
+    $('#fetchErr').textContent = e.message; $('#fetchErr').classList.remove('hidden');
+  } finally {
+    $('#fetchBtn').disabled = false; $('#fetchBtn').textContent = 'Fetch info';
+  }
+}
+$('#fetchBtn').onclick = fetchInfo;
+
+let dlDir = '';  // folder shown on the Download, YouTube to MP3 and Live pages (see showDlDir)
+function collectOpts() {
+  const q = $('#quality').value;
+  const o = {
+    video: $('#optVideo').checked,
+    chat: $('#optChat').checked,
+    chat_formats: [...document.querySelectorAll('.cf:checked')].map(c => c.value),
+    start: $('#start').value.trim(),
+    end: $('#end').value.trim(),
+  };
+  if (dlDir) o.output_dir = dlDir;
+  if ($('#optBurn').checked) { o.burn = true; o.keep_original = $('#optKeep').checked; const st = pickedStyle('#optPreset'); if (st) o.chat_style = st; }
+  else if (q) { const [h, f] = q.split('|'); o.height = +h; if (f) o.fps = +f; }
+  return o;
+}
+async function queue(list, opts) {
+  if (!opts.video && !opts.chat) throw new Error('Pick at least Video or Chat.');
+  if (opts.burn && (!opts.video || !opts.chat || opts.audio_only)) throw new Error('Baking chat in needs both Video and Chat (and not audio only).');
+  await api('/api/jobs', {urls: list, opts});
+  setQFilter('active');
+}
+$('#dlBtn').onclick = async () => {
+  const u = urls();
+  if (!u.length) { $('#fetchErr').textContent = 'Paste a URL first.'; $('#fetchErr').classList.remove('hidden'); return; }
+  try {
+    const o = collectOpts();
+    if (u.length > 1) { delete o.start; delete o.end; delete o.fps; }  // a batch has no single timeline
+    await queue(u, o);
+    $('#url').value = ''; $('#start').value = ''; $('#end').value = '';
+    clearInfo(); $('#fetchErr').classList.add('hidden');
+  } catch (e) { $('#fetchErr').textContent = e.message; $('#fetchErr').classList.remove('hidden'); }
+};
+
+/* ---------- trim timeline (with chat activity for Twitch VODs) ---------- */
+let trimDur = 0, trimDrag = null;
+function trimSetup(i) {
+  trimDur = i && !i.is_live ? i.duration || 0 : 0;
+  $('#trim').classList.toggle('hidden', !trimDur);
+  $('#trimTicks').classList.toggle('hidden', !trimDur);
+  $('#trimTicks').innerHTML = trimDur ? [0, .25, .5, .75, 1].map(f => `<span style="left:${f * 100}%">${fmtDur(Math.round(trimDur * f))}</span>`).join('') : '';
+  $('#trimGraph').innerHTML = '';
+  $('#trimHint').textContent = trimDur ? 'Drag across the bar or its handles to pick a section, or type exact times.' : 'Leave empty for the whole video. Times are h:mm:ss.';
+  trimDraw();
+  if (trimDur && i.platform === 'twitch' && i.chat) {
+    const url = i.url;
+    api('/api/chat/activity', {url}).then(a => {
+      if (!current || current.url !== url || !a.per_minute?.length) return;
+      const v = a.per_minute, max = Math.max(...v, 1), n = v.length;
+      const pts = v.map((x, k) => `${(k + 0.5) / n * 100},${40 - x / max * 34}`).join(' L');
+      $('#trimGraph').innerHTML = `<path d="M0,40 L0,${40 - v[0] / max * 34} L${pts} L100,${40 - v[n - 1] / max * 34} L100,40Z" fill="#9b5cff40" stroke="#b085ff" stroke-width=".6" vector-effect="non-scaling-stroke"/>`;
+      $('#trimHint').textContent = 'The graph shows how busy chat was. Drag across it to pick a section, or type exact times.';
+      $('#chatCount').classList.remove('hidden'); $('#chatCount b').textContent = Math.round(max).toLocaleString();
+    }).catch(() => {});
+  }
+}
+function trimDraw() {
+  if (!trimDur) { $('#trimAll').classList.add('hidden'); $('#trimLen').textContent = ''; return; }
+  const a = Math.max(0, Math.min(trimDur, parseTime($('#start').value) ?? 0));
+  const z = Math.max(a, Math.min(trimDur, parseTime($('#end').value) ?? trimDur));
+  const full = a <= 0 && z >= trimDur;
+  Object.assign($('#trimSel').style, {left: a / trimDur * 100 + '%', width: (z - a) / trimDur * 100 + '%'});
+  $('#trimSel').classList.toggle('full', full);
+  $('#trimA').style.left = a / trimDur * 100 + '%'; $('#trimZ').style.left = z / trimDur * 100 + '%';
+  $('#trimAll').classList.toggle('hidden', full);
+  $('#trimLen').textContent = full ? `Whole video · ${fmtDur(trimDur)}` : `${fmtDur(z - a)} of ${fmtDur(trimDur)} selected ·`;
+}
+['#start', '#end'].forEach(id => $(id).addEventListener('input', () => { trimDraw(); dlSummary(); }));
+$('#trimAll').onclick = () => { $('#start').value = ''; $('#end').value = ''; trimDraw(); dlSummary(); };
+$('#trim').addEventListener('pointerdown', e => {
+  if (!trimDur || e.button !== 0) return;
+  e.preventDefault();
+  const r = $('#trim').getBoundingClientRect(), at = x => Math.round(Math.max(0, Math.min(1, (x - r.left) / r.width)) * trimDur);
+  const a = parseTime($('#start').value) ?? 0, z = parseTime($('#end').value) ?? trimDur, t = at(e.clientX);
+  let mode = e.target === $('#trimA') ? 'a' : e.target === $('#trimZ') ? 'z' : e.target === $('#trimSel') && !$('#trimSel').classList.contains('full') ? 'move' : 'new';
+  trimDrag = {r, at, mode, a, z, t0: t, id: e.pointerId};
+  $('#trim').setPointerCapture(e.pointerId);
+});
+$('#trim').addEventListener('pointermove', e => {
+  const d = trimDrag; if (!d || e.pointerId !== d.id) return;
+  const t = d.at(e.clientX);
+  let a = d.a, z = d.z;
+  if (d.mode === 'a') a = Math.min(t, z - 1);
+  else if (d.mode === 'z') z = Math.max(t, a + 1);
+  else if (d.mode === 'move') { const w = d.z - d.a; a = Math.max(0, Math.min(trimDur - w, d.a + t - d.t0)); z = a + w; }
+  else { a = Math.min(d.t0, t); z = Math.max(d.t0, t); if (z - a < 1) return; }
+  $('#start').value = a > 0 ? fmtDur(a) : '';
+  $('#end').value = z < trimDur ? fmtDur(z) : '';
+  trimDraw(); dlSummary();
+});
+['pointerup', 'pointercancel'].forEach(ev => $('#trim').addEventListener(ev, () => trimDrag = null));
+
+/* ---------- summary above the Download button ---------- */
+function dlSummary() {
+  const u = urls(), o = collectOpts();
+  const q = $('#quality').selectedOptions[0]?.textContent || 'Best available';
+  $('.sect').classList.toggle('hidden', u.length > 1);
+  if (!u.length) { $('#dlSum').textContent = 'Nothing to download yet'; $('#dlSub').textContent = 'Paste a link above.'; return; }
+  const a = parseTime(o.start), z = parseTime(o.end);
+  const sect = a != null || z != null ? `${fmtDur(a || 0)} → ${z != null ? fmtDur(z) : 'end'}` : 'Whole video';
+  $('#dlSum').textContent = u.length > 1 ? `${u.length} links · ${q}` : current ? `${sect} · ${o.video ? q : 'no video'}` : u[0];
+  const bits = [];
+  if (!o.video) bits.push('chat only');
+  if (o.chat && o.chat_formats.length) bits.push('chat as ' + o.chat_formats.map(f => f === 'html' ? 'HTML replay' : f.toUpperCase()).join(', '));
+  else if (!o.chat) bits.push('no chat');
+  if (o.burn) bits.push('chat baked in' + (o.keep_original ? ' (original kept)' : ''));
+  $('#dlSub').textContent = bits.join(' · ');
+}
+['#optVideo', '#optChat', '#optBurn', '#optKeep', '#quality'].forEach(id => $(id).addEventListener('change', () => { burnState(); dlSummary(); }));
+document.querySelectorAll('.cf').forEach(c => c.addEventListener('change', dlSummary));
+function burnState() {
+  const on = $('#optBurn').checked;
+  $('#optKeep').disabled = !on;
+  $('#optPick').style.opacity = on ? '' : '.5';
+  document.querySelectorAll('.cf').forEach(c => c.disabled = !$('#optChat').checked);
+}
+
+/* ---------- youtube to mp3 ---------- */
+const AFMT_HINT = {mp3: 'Plays everywhere. 320 kbps is the best MP3 quality; 192 kbps files are smaller.',
+  wav: 'Uncompressed, for editing software. Large files (about 10 MB per minute).',
+  flac: 'Lossless and about half the size of WAV. No quality is lost after the download.',
+  m4a: 'The original audio as YouTube serves it, with no re-encoding. Plays on Apple devices and most players.',
+  opus: 'Small files at good quality. Not every player supports it.'};
+const AFMT_NAME = {mp3: 'MP3 · 320 kbps', 'mp3-192': 'MP3 · 192 kbps', wav: 'WAV', flac: 'FLAC', m4a: 'M4A', opus: 'Opus'};
+const aud = {items: [], fmt: localStorage.getItem('sg.aFmt') || 'mp3', rate: localStorage.getItem('sg.aRate') || 'mp3'};
+const audFormat = () => aud.fmt === 'mp3' ? aud.rate : aud.fmt;
+function audRender() {
+  $('#aList').innerHTML = aud.items.map((it, k) => `<div class="arow ${it.error ? 'bad' : ''}">
+    <div class="th" style="${it.thumbnail ? `background-image:url('${esc(it.thumbnail)}')` : ''}">${it.duration ? `<span>${fmtDur(it.duration)}</span>` : ''}</div>
+    <div class="grow" style="min-width:0"><div class="t" title="${esc(it.title || it.url)}">${esc(it.title || it.url)}</div>
+      <div class="m">${esc(it.error || (it.loading ? 'Getting info…' : [it.channel, it.platform].filter(Boolean).join(' · ')))}</div></div>
+    <button class="x" data-k="${k}" title="Remove">✕</button></div>`).join('');
+  const ok = aud.items.filter(it => !it.error), n = ok.length;
+  $('#aWelcome').classList.toggle('hidden', aud.items.length > 0);
+  $('#aBar').classList.toggle('hidden', !aud.items.length);
+  $('#aCount').textContent = `${aud.items.length} link${aud.items.length === 1 ? '' : 's'}`;
+  document.querySelectorAll('#aFmt button').forEach(b => b.classList.toggle('on', b.dataset.f === aud.fmt));
+  document.querySelectorAll('#aRate button').forEach(b => b.classList.toggle('on', b.dataset.r === aud.rate));
+  $('#aMp3Row').classList.toggle('hidden', aud.fmt !== 'mp3');
+  $('#aFmtHint').textContent = AFMT_HINT[aud.fmt];
+  const total = ok.reduce((a, it) => a + (it.duration || 0), 0);
+  $('#aSum').textContent = n ? `${n} video${n === 1 ? '' : 's'} → ${AFMT_NAME[audFormat()]}` : 'No links added';
+  $('#aSub').textContent = !n ? 'Paste a link above.' : ok.some(it => it.loading) ? 'Getting info…' : total ? `${fmtDur(total)} of audio in total` : '';
+  $('#aBtn').disabled = !n;
+  $('#aBtn').textContent = n > 1 ? `⬇︎ Download ${n} as audio` : '⬇︎ Download audio';
+}
+function audAdd() {
+  const list = $('#aUrl').value.split(/\s+/).map(x => x.trim()).filter(Boolean);
+  $('#aUrl').value = ''; $('#aUrl').style.height = '';
+  $('#aErr').classList.add('hidden');
+  list.filter(u => !aud.items.some(it => it.url === u || it.input === u)).forEach(u => {
+    const it = {url: u, input: u, loading: true};
+    aud.items.push(it);
+    api('/api/info', {url: u}).then(i => Object.assign(it, {url: i.url || u, title: i.title, channel: i.channel, platform: i.platform,
+      thumbnail: i.thumbnail, duration: i.duration, loading: false, error: i.is_live ? 'This is a live stream: record it on the Live page.' : ''}))
+      .catch(e => Object.assign(it, {loading: false, error: e.message.replace(/^ERROR:\s*(\[\w+\]\s*[^:]+:\s*)?/, '')}))
+      .finally(audRender);
+  });
+  audRender();
+}
+$('#aAdd').onclick = audAdd;
+$('#aUrl').addEventListener('paste', () => setTimeout(audAdd, 0));
+$('#aUrl').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); audAdd(); } });
+$('#aUrl').addEventListener('input', () => { $('#aUrl').style.height = 'auto'; $('#aUrl').style.height = $('#aUrl').scrollHeight + 2 + 'px'; });
+$('#aList').addEventListener('click', e => { if (e.target.dataset.k != null) { aud.items.splice(+e.target.dataset.k, 1); audRender(); } });
+$('#aClear').onclick = () => { aud.items = []; audRender(); };
+$('#aFmt').onclick = e => { const f = e.target.dataset.f; if (f) { aud.fmt = f; localStorage.setItem('sg.aFmt', f); audRender(); } };
+$('#aRate').onclick = e => { const r = e.target.dataset.r; if (r) { aud.rate = r; localStorage.setItem('sg.aRate', r); audRender(); } };
+$('#aBtn').onclick = async () => {
+  const list = aud.items.filter(it => !it.error);
+  if (!list.length) return;
+  try {
+    await api('/api/jobs', {urls: list.map(it => it.url), opts: {video: true, chat: false, audio_only: true,
+      audio_format: audFormat(), output_dir: dlDir || undefined}});
+    aud.items = aud.items.filter(it => it.error); audRender(); setQFilter('active');
+  } catch (e) { $('#aErr').textContent = e.message; $('#aErr').classList.remove('hidden'); }
+};
+audRender();
+
+/* ---------- browse ---------- */
+const TABS = {
+  twitch: [['videos', 'All videos'], ['archive', 'Past broadcasts'], ['highlights', 'Highlights'], ['uploads', 'Uploads']],
+  youtube: [['streams', 'Live / past streams'], ['videos', 'Videos'], ['shorts', 'Shorts']],
+};
+function setTabs() { const s = $('#bTab'); s.innerHTML = ''; TABS[$('#bPlat').value].forEach(([v, l]) => s.add(new Option(l, v))); }
+$('#bPlat').onchange = setTabs; setTabs();
+$('#bQuery').addEventListener('keydown', e => { if (e.key === 'Enter') browse(); });
+$('#bBtn').onclick = browse;
+let selected = new Set();
+function updateSel() {
+  $('#bQueue').disabled = !selected.size;
+  $('#bQueue').textContent = selected.size > 1 ? `Open ${selected.size} in Download →` : 'Open in Download →';
+  $('#bSum').textContent = selected.size ? `${selected.size} video${selected.size > 1 ? 's' : ''} selected` : 'No videos selected';
+}
+async function browse() {
+  const query = $('#bQuery').value.trim();
+  if (!query) return;
+  const q = query.toLowerCase();
+  if (q.includes('youtube.com') || q.startsWith('@')) { if ($('#bPlat').value !== 'youtube') { $('#bPlat').value = 'youtube'; setTabs(); } }
+  else if (q.includes('twitch.tv') && $('#bPlat').value !== 'twitch') { $('#bPlat').value = 'twitch'; setTabs(); }
+  $('#bErr').classList.add('hidden');
+  $('#bBtn').disabled = true; $('#bBtn').textContent = 'Loading…';
+  $('#bGrid').innerHTML = ''; $('#bWelcome').classList.add('hidden');
+  selected = new Set(); updateSel();
+  try {
+    const r = await api('/api/channel', {platform: $('#bPlat').value, query, tab: $('#bTab').value});
+    $('#bTitle').textContent = `${r.channel} — ${r.items.length} videos`;
+    $('#bBar').classList.remove('hidden'); $('#bHint').classList.remove('hidden');
+    if (!r.items.length) $('#bGrid').innerHTML = '<div class="empty">No videos found.</div>';
+    r.items.forEach(v => {
+      const d = document.createElement('div');
+      d.className = 'vod';
+      d.innerHTML = `<img src="${esc(v.thumbnail)}" loading="lazy" alt="" onerror="this.style.visibility='hidden'">
+        <span class="tick"></span>${v.duration ? `<span class="dur">${fmtDur(v.duration)}</span>` : ''}
+        <div class="t" title="${esc(v.title)}">${esc(v.title)}</div>
+        <div class="m">${[v.date, v.views != null ? (+v.views).toLocaleString() + ' views' : '', v.type].filter(Boolean).map(esc).join(' · ')}</div>`;
+      d.onclick = () => { selected.has(v.url) ? selected.delete(v.url) : selected.add(v.url); d.classList.toggle('sel', selected.has(v.url)); updateSel(); };
+      d.ondblclick = () => openInDownload([v.url]);
+      $('#bGrid').appendChild(d);
+    });
+  } catch (e) { $('#bErr').textContent = e.message; $('#bErr').classList.remove('hidden'); }
+  finally { $('#bBtn').disabled = false; $('#bBtn').textContent = 'Search'; }
+}
+$('#bAll').onclick = () => {
+  const cards = [...$('#bGrid').querySelectorAll('.vod')];
+  const allOn = cards.every(c => c.classList.contains('sel'));
+  cards.forEach(c => { if (c.classList.contains('sel') === allOn) c.click(); });
+};
+// Browse never downloads directly: the picks go to the Download page, where the options are set.
+function openInDownload(list) {
+  $('#url').value = list.join('\n'); $('#start').value = ''; $('#end').value = '';
+  $('#url').dispatchEvent(new Event('input')); clearInfo(); $('#fetchErr').classList.add('hidden');
+  showTab('download'); document.querySelector('#tab-download .vbody').scrollTop = 0;
+  if (list.length === 1) fetchInfo();
+  $('#bGrid').querySelectorAll('.vod.sel').forEach(c => c.classList.remove('sel'));
+  selected = new Set(); updateSel();
+}
+$('#bQueue').onclick = () => openInDownload([...selected]);
+
+/* ---------- queue ---------- */
+const STATUS = {queued: 'Queued', running: '', done: 'Done', error: 'Failed', cancelled: 'Cancelled'};
+let qFilter = 'active', lastJobsSig = '';
+document.querySelectorAll('#qTabs button').forEach(b => b.onclick = () => setQFilter(b.dataset.q));
+function setQFilter(q) { qFilter = q; lastJobsSig = ''; document.querySelectorAll('#qTabs button').forEach(x => x.classList.toggle('on', x.dataset.q === q)); refresh(); }
+let activeJobs = 0;
+async function refresh() {
+  let jobs;
+  try { jobs = await api('/api/jobs'); } catch { return; }
+  const isActive = j => j.status === 'running' || j.status === 'queued';
+  const wasActive = activeJobs;
+  activeJobs = jobs.filter(isActive).length;
+  // Everything just finished: show the results instead of an empty "Active" list.
+  if (wasActive && !activeJobs && qFilter === 'active') { qFilter = 'done'; document.querySelectorAll('#qTabs button').forEach(x => x.classList.toggle('on', x.dataset.q === 'done')); }
+  const recs = jobs.filter(j => j.kind === 'live' && j.status === 'running').length;
+  $('#liveBadge').textContent = recs; $('#liveBadge').classList.toggle('hidden', !recs);
+  const nDone = jobs.length - activeJobs;
+  $('#qTabs [data-q=active]').textContent = `Active · ${activeJobs}`;
+  $('#qTabs [data-q=done]').textContent = `Finished · ${nDone}`;
+  const el = $('#jobs');
+  const shown = jobs.filter(j => qFilter === 'active' ? isActive(j) : !isActive(j));
+  const sig = JSON.stringify(shown);
+  if (sig === lastJobsSig) return;
+  lastJobsSig = sig;
+  if (!shown.length) {
+    el.innerHTML = qFilter === 'active'
+      ? `<div class="empty"><div class="big">⬇︎</div>Nothing downloading right now.${nDone ? `<br><a class="link" data-q="done">See ${nDone} finished</a>` : ''}</div>`
+      : '<div class="empty"><div class="big">✓</div>Finished downloads show up here.</div>';
+    return;
+  }
+  el.innerHTML = shown.map(j => {
+    const i = j.info || {};
+    const pct = Math.round((j.status === 'done' ? 1 : j.progress) * 100);
+    const label = j.status === 'running' ? j.stage : STATUS[j.status];
+    let what = [j.opts.video !== false ? (j.opts.audio_only ? (AFMT_NAME[j.opts.audio_format] || 'M4A') + ' audio' : (j.opts.height ? j.opts.height + 'p' : 'best')) : null, j.opts.chat ? 'chat' : null, j.opts.burn ? 'baked in' : null].filter(Boolean).join(' + ');
+    if (j.kind === 'live') what = '🔴 live recording' + (j.opts.chat ? ' + chat' : '') + (j.opts.burn ? ' (baked in)' : '');
+    if (j.kind === 'burn') what = 'chat re-render';
+    if (j.kind === 'convert') what = j.opts.what || 'audio conversion';
+    const recording = j.kind === 'live' && j.status === 'running' && ['Recording', 'Stopping'].includes(j.stage);
+    return `<div class="job ${j.status} ${j.kind} ${recording ? 'recording' : ''}">
+      ${j.kind === 'convert' ? '<div class="noteimg">🎵</div>' : `<img src="${esc(i.thumbnail || '')}" alt="" onerror="this.style.visibility='hidden'">`}
+      <div class="body">
+        <div class="title" title="${esc(i.title || j.url)}">${esc(i.title || j.url)}</div>
+        <div class="stat">${i.channel ? `<span>${esc(i.channel)}</span>` : ''}<span>${esc(what)}</span>${j.opts.start || j.opts.end ? `<span>✂ ${esc(j.opts.start || '0')}–${esc(j.opts.end || 'end')}</span>` : ''}</div>
+        <div class="bar"><div style="width:${j.status === 'running' || j.status === 'done' ? pct : 0}%"></div></div>
+        <div class="stat"><b>${esc(label)}</b>${j.status === 'running' && !(j.kind === 'live' && !j.stage.startsWith('Rendering')) ? `<span>${pct}%</span>` : ''}<span>${esc(j.detail)}</span></div>
+        ${j.error ? `<div class="err" style="margin-top:4px">${esc(j.error)}</div>` : ''}
+        ${j.files.length ? `<div class="files">${j.files.map(f => `<a data-open="${esc(f)}" title="Open ${esc(f)}">${j.kind === 'convert' ? '🎵 ' + esc(f.split(/[\\/]/).pop()) : fileLabel(f)}</a>`).join('')}</div>` : ''}
+        <div class="acts">
+          ${recording && !j.stopping ? `<button class="btn rec sm" data-act="stop" data-id="${j.id}">■ Stop &amp; save</button>` : ''}
+          ${['queued', 'running'].includes(j.status) && !recording ? `<button class="btn sec sm" data-act="cancel" data-id="${j.id}">Cancel</button>` : ''}
+          ${j.can_burn ? `<button class="btn sec sm" data-act="burn" data-id="${j.id}" title="Render chat onto this video again using the current chat style">Re-render chat</button>` : ''}
+          ${['error', 'cancelled'].includes(j.status) ? `<button class="btn sec sm" data-act="retry" data-id="${j.id}">Retry</button>` : ''}
+          ${j.files.length ? `<button class="btn sec sm" data-reveal="${esc(j.files[0])}">Show in folder</button>` : ''}
+          ${!['queued', 'running'].includes(j.status) ? `<button class="btn sec sm" data-act="remove" data-id="${j.id}">Remove</button>` : ''}
+        </div>
+      </div></div>`;
+  }).join('');
+}
+$('#jobs').addEventListener('click', async e => {
+  const t = e.target;
+  if (t.dataset.q) { setQFilter(t.dataset.q); return; }
+  if (t.dataset.act) { await api(`/api/jobs/${t.dataset.id}/${t.dataset.act}`, t.dataset.act === 'burn' ? {style: chatStyle} : {}); if (t.dataset.act === 'retry') await api(`/api/jobs/${t.dataset.id}/remove`, {}); refresh(); }
+  else if (t.dataset.reveal) api('/api/reveal', {path: t.dataset.reveal});
+  else if (t.dataset.open) api('/api/open', {path: t.dataset.open});
+});
+$('#clearBtn').onclick = async () => { await api('/api/jobs/clear', {}); refresh(); };
+setInterval(refresh, 1000); refresh();
+// Closing the window quits the app (Windows): ask first while something is running.
+window.addEventListener('beforeunload', e => { if (activeJobs && !window.STREAMGRAB_NATIVE) { e.preventDefault(); e.returnValue = ''; } });
+
+/* ---------- live ---------- */
+const lq = $('#lQuality');
+[['', 'Best available'], ['1080', '1080p'], ['720', '720p'], ['480', '480p'], ['360', '360p']].forEach(([v, l]) => lq.add(new Option(l, v)));
+function liveMode() {
+  const tw = $('#lPlat').value === 'twitch';
+  document.querySelectorAll('.tw-only').forEach(e => e.classList.toggle('hidden', !tw));
+  document.querySelectorAll('.yt-only').forEach(e => e.classList.toggle('hidden', tw));
+  $('#lQuery').placeholder = tw ? 'Twitch channel name or URL' : 'YouTube @handle, channel URL or live video URL';
+}
+$('#lPlat').onchange = () => { liveMode(); $('#lInfo').classList.add('hidden'); };
+liveMode();
+function guessPlatform(q) {
+  q = q.toLowerCase();
+  const want = (q.includes('youtube.com') || q.includes('youtu.be') || q.startsWith('@')) ? 'youtube' : q.includes('twitch.tv') ? 'twitch' : null;
+  if (want && $('#lPlat').value !== want) { $('#lPlat').value = want; liveMode(); }
+}
+async function checkLive() {
+  const query = $('#lQuery').value.trim();
+  if (!query) return null;
+  guessPlatform(query);
+  $('#lErr').classList.add('hidden');
+  $('#lCheck').disabled = true; $('#lCheck').textContent = 'Checking…';
+  try {
+    const s = await api('/api/live/status', {platform: $('#lPlat').value, query});
+    $('#lInfo').innerHTML = `
+      <div class="th" style="background-image:url('${esc(s.thumbnail || s.avatar)}')${s.live ? '' : ';filter:grayscale(.7) brightness(.7)'}">${s.live ? '<span class="dur" style="background:var(--rec)">● LIVE</span>' : ''}</div>
+      <div style="min-width:0">
+        <div class="row" style="gap:6px"><span class="pill ${s.live ? 'live' : 'off'}">${s.live ? '● live' : 'offline'}</span><span class="pill ${esc($('#lPlat').value)}">${esc($('#lPlat').value)}</span></div>
+        <h3>${esc(s.live ? s.title : s.channel)}</h3>
+        <div class="meta">
+          <span>${esc(s.channel)}</span>
+          ${s.game ? `<span>${esc(s.game)}</span>` : ''}
+          ${s.viewers != null && s.live ? `<span>${(+s.viewers).toLocaleString()} watching</span>` : ''}
+          ${s.note ? `<span>${esc(s.note)}</span>` : ''}
+        </div>
+      </div>`;
+    $('#lInfo').classList.remove('hidden'); $('#lWelcome').classList.add('hidden');
+    $('#lRec').textContent = s.live ? '● Start recording' : ($('#lWait').checked ? '● Wait & record' : '● Start recording');
+    return s;
+  } catch (e) { $('#lErr').textContent = e.message; $('#lErr').classList.remove('hidden'); return null; }
+  finally { $('#lCheck').disabled = false; $('#lCheck').textContent = 'Check status'; }
+}
+$('#lCheck').onclick = checkLive;
+$('#lQuery').addEventListener('keydown', e => { if (e.key === 'Enter') checkLive(); });
+$('#lWait').onchange = () => { if (!$('#lInfo').classList.contains('hidden') && $('#lInfo').querySelector('.pill.off')) $('#lRec').textContent = $('#lWait').checked ? '● Wait & record' : '● Start recording'; };
+$('#lRec').onclick = async () => {
+  const query = $('#lQuery').value.trim();
+  if (!query) { $('#lErr').textContent = 'Enter a channel first.'; $('#lErr').classList.remove('hidden'); return; }
+  guessPlatform(query);
+  const tw = $('#lPlat').value === 'twitch';
+  const opts = {
+    live: true, platform: $('#lPlat').value, channel: query, wait: $('#lWait').checked,
+    chat: tw && $('#lChat').checked, chat_formats: [...document.querySelectorAll('.cf:checked')].map(c => c.value),
+    burn: tw && $('#lChat').checked && $('#lBurn').checked, keep_original: $('#lKeep').checked,
+    from_start: !tw && $('#lFromStart').checked, chat_style: pickedStyle('#lPreset') || undefined,
+    output_dir: dlDir || undefined,
+  };
+  if ($('#lQuality').value) opts.height = +$('#lQuality').value;
+  try {
+    await api('/api/jobs', {url: query, opts});
+    $('#lErr').classList.add('hidden');
+    setQFilter('active');
+  } catch (e) { $('#lErr').textContent = e.message; $('#lErr').classList.remove('hidden'); }
+};
+
+/* ---------- chat style editor ---------- */
+let chatStyle = null, styleDefaults = null, fontsLoaded = false, previewSeq = 0, previewTimer = null, saveTimer = null;
+const UNITS = {width: '%', height: '%', x: '%', y: '%', font_size: 'px', bg_opacity: '%', radius: 'px'};
+(async () => { try { chatStyle = (await api('/api/settings')).chat_style; } catch {} })();
+
+function fillStyle() {
+  if (chatStyle.animate_twitch == null) chatStyle.animate_twitch = true;  // styles saved before this switch existed
+  document.querySelectorAll('#tab-style [data-k]').forEach(el => {
+    const v = chatStyle[el.dataset.k];
+    if (el.type === 'checkbox') el.checked = !!v; else el.value = v;
+  });
+  document.querySelectorAll('#stLayout button').forEach(b => b.classList.toggle('on', b.dataset.v === chatStyle.layout));
+  document.querySelectorAll('#stPos button').forEach(b => b.classList.toggle('on', +b.dataset.x === chatStyle.x && +b.dataset.y === chatStyle.y));
+  document.querySelectorAll('#tab-style [data-out]').forEach(o => o.textContent = Math.round(chatStyle[o.dataset.out]) + (UNITS[o.dataset.out] || ''));
+  document.querySelectorAll('.ov-only').forEach(e => e.classList.toggle('hidden', chatStyle.layout !== 'overlay'));
+  document.querySelector('[data-k=animate_twitch]').disabled = !chatStyle.show_emotes;
+  document.querySelector('[data-k=third_party]').disabled = !chatStyle.show_emotes;
+  document.querySelector('[data-k=animate]').disabled = !chatStyle.show_emotes || !chatStyle.third_party;
+  syncPresetBar();
+}
+function styleChanged() {
+  fillStyle();
+  clearTimeout(previewTimer); previewTimer = setTimeout(renderPreview, 90);
+  clearTimeout(saveTimer); saveTimer = setTimeout(async () => {
+    await api('/api/settings', {chat_style: chatStyle});
+    $('#stSaved').textContent = 'Saved'; setTimeout(() => $('#stSaved').textContent = '', 1200);
+  }, 500);
+}
+document.querySelectorAll('#tab-style [data-k]').forEach(el => el.addEventListener('input', () => {
+  const k = el.dataset.k;
+  chatStyle[k] = el.type === 'checkbox' ? el.checked : el.type === 'range' ? +el.value : el.value;
+  styleChanged();
+}));
+document.querySelectorAll('#stLayout button').forEach(b => b.onclick = () => { chatStyle.layout = b.dataset.v; styleChanged(); });
+document.querySelectorAll('#stPos button').forEach(b => b.onclick = () => { chatStyle.x = +b.dataset.x; chatStyle.y = +b.dataset.y; styleChanged(); });
+$('#stReset').onclick = async () => {
+  if (!styleDefaults) return;
+  chatStyle = {...styleDefaults}; styleChanged();
+};
+$('#stAt').addEventListener('change', () => renderPreview());
+
+function previewSource() {
+  const v = lastFetched;
+  return v && v.platform === 'twitch' && v.chat ? v : null;
+}
+async function openStyleEditor() {
+  if (!chatStyle) chatStyle = (await api('/api/settings')).chat_style;
+  if (!styleDefaults) {
+    styleDefaults = {layout: 'side-right', width: 24, height: 55, x: 98, y: 96, font_family: 'System', font_size: 24,
+      text_color: '#efeff1', bg_color: '#18181b', bg_opacity: 100, radius: 0, show_badges: true, show_emotes: true,
+      animate: true, animate_twitch: true, third_party: true, timestamps: false, shadow: false};
+  }
+  fillStyle();
+  if (!fontsLoaded) {
+    fontsLoaded = true;
+    api('/api/fonts').then(list => {
+      const sel = $('#stFont'); sel.innerHTML = '';
+      list.forEach(f => sel.add(new Option(f, f)));
+      if (!list.includes(chatStyle.font_family)) sel.add(new Option(chatStyle.font_family, chatStyle.font_family));
+      sel.value = chatStyle.font_family;
+    }).catch(() => {});
+  }
+  const src = previewSource();
+  if (src && !$('#stAt').value && $('#start').value) $('#stAt').value = $('#start').value;
+  renderPreview();
+  loadPoster();
+}
+// Animated emotes: the renderer returns ~2 s of frames when one is on screen; loop through them.
+let animTimer = null;
+function playPreview(pngs, fps) {
+  clearInterval(animTimer); animTimer = null;
+  const urls = pngs.map(b => 'data:image/png;base64,' + b);
+  $('#stChat').src = urls[0];
+  if (urls.length < 2) return;
+  urls.forEach(u => { new Image().src = u; });  // decode ahead so the loop doesn't flicker
+  let i = 0;
+  animTimer = setInterval(() => {
+    if ($('#tab-style').classList.contains('hidden')) return;  // paused while another page is shown
+    i = (i + 1) % urls.length; $('#stChat').src = urls[i];
+  }, 1000 / fps);
+}
+async function renderPreview() {
+  const seq = ++previewSeq;
+  const src = previewSource();
+  $('#stBusy').classList.add('on');
+  try {
+    // "Preview chat at" left on auto: show the chat from the moment of the background frame.
+    const at = parseTime($('#stAt').value) ?? (posterT > 0 ? posterT : null);
+    const r = await api('/api/chat/preview', {style: chatStyle, url: src ? src.url : null, at});
+    if (seq !== previewSeq) return;  // a newer preview is on its way
+    const g = r.geometry, pct = (v, of) => (v / of * 100) + '%';
+    lastGeom = g;
+    $('#stStage').style.aspectRatio = `${g.out_w} / ${g.out_h}`;
+    Object.assign($('#stBg').style, {left: pct(g.video_x, g.out_w), top: '0', width: pct(g.video_w, g.out_w), height: pct(g.video_h, g.out_h)});
+    applyBg();
+    if (!resize) Object.assign(stBox.style, {left: pct(g.panel_x, g.out_w), top: pct(g.panel_y, g.out_h), width: pct(g.panel_w, g.out_w), height: pct(g.panel_h, g.out_h)});
+    stBox.classList.toggle('side', chatStyle.layout !== 'overlay');
+    stBox.querySelectorAll('.h').forEach(h => h.classList.toggle('edge', h.dataset.h === (chatStyle.layout === 'side-left' ? 'e' : 'w')));
+    playPreview([r.png, ...(r.frames || [])], r.fps || 12);
+    $('#stSrc').textContent = r.sample === 'vod' ? `Showing real chat from “${src.title}”` : 'Showing sample chat — fetch a Twitch VOD on the Download tab to preview its real chat.';
+  } catch (e) {
+    if (seq === previewSeq) $('#stSrc').textContent = 'Preview failed: ' + e.message;
+  } finally {
+    if (seq === previewSeq) $('#stBusy').classList.remove('on');
+  }
+}
+
+/* ---------- presets ---------- */
+let presets = {}, activePreset = null;
+// Two styles match if every setting is equal (positions/sizes within 0.05%).
+const sameStyle = (a, b) => !!a && !!b && Object.keys(b).every(k =>
+  typeof a[k] === 'number' ? Math.abs(a[k] - b[k]) < 0.05 : a[k] === b[k]);
+function matchingPreset() { return Object.keys(presets).find(n => sameStyle(presets[n], chatStyle)) || null; }
+function syncPresetBar() {
+  if (!chatStyle) return;
+  const match = matchingPreset();
+  if (match) activePreset = match;
+  const sel = $('#pSel'), names = Object.keys(presets).sort((a, b) => a.localeCompare(b));
+  sel.innerHTML = '';
+  sel.add(new Option(names.length ? (match ? '—' : 'Custom (not saved)') : 'No presets yet', ''));
+  names.forEach(n => sel.add(new Option(n, n)));
+  sel.value = match || (activePreset && presets[activePreset] ? activePreset : '');
+  const dirty = !!activePreset && !!presets[activePreset] && !match;
+  $('#pDirty').classList.toggle('hidden', !dirty);
+  $('#pUpdate').classList.toggle('hidden', !dirty);
+  $('#pDelete').classList.toggle('hidden', !(activePreset && presets[activePreset]));
+  fillPresetPickers();
+}
+function fillPresetPickers() {
+  document.querySelectorAll('.preset-pick').forEach(sel => {
+    const keep = sel.value;
+    sel.innerHTML = '';
+    sel.add(new Option('Current style', ''));
+    Object.keys(presets).sort((a, b) => a.localeCompare(b)).forEach(n => sel.add(new Option(n, n)));
+    sel.value = presets[keep] ? keep : '';
+  });
+  renderPickers();
+}
+// Thumbnail picker for the bake-in style: one card per preset, drawn from its layout and colors.
+function miniStyle(st) {
+  if (!st) return '';
+  const hex = st.bg_color || '#18181b', op = (st.bg_opacity ?? 100) / 100;
+  const bgc = `rgba(${parseInt(hex.slice(1, 3), 16)},${parseInt(hex.slice(3, 5), 16)},${parseInt(hex.slice(5, 7), 16)},${Math.max(op, .25)})`;
+  const tc = st.text_color || '#ffffff';
+  const lines = `repeating-linear-gradient(to bottom, transparent 0 3px, ${tc}66 3px 4px)`;
+  let box;
+  if (st.layout === 'overlay') {
+    const w = st.width, h = st.height;
+    box = `left:${(100 - w) * st.x / 100}%;top:${(100 - h) * st.y / 100}%;width:${w}%;height:${h}%;border-radius:${Math.min(3, st.radius / 6)}px`;
+  } else box = `${st.layout === 'side-left' ? 'left' : 'right'}:0;top:0;bottom:0;width:${st.width}%`;
+  return `<i style="${box};background:${lines} 3px 2px / calc(100% - 8px) calc(100% - 4px) no-repeat, ${bgc}"></i>`;
+}
+function renderPickers() {
+  [['#optPick', '#optPreset'], ['#lPick', '#lPreset']].forEach(([box, sel]) => {
+    const s = $(sel), opts = [...s.options];
+    $(box).innerHTML = opts.map(o => {
+      const st = o.value ? presets[o.value] : chatStyle;
+      return `<button type="button" class="sp-item ${s.value === o.value ? 'on' : ''}" data-v="${esc(o.value)}" title="${esc(o.textContent)}">
+        <div class="mini">${miniStyle(st)}</div><div class="nm">${esc(o.textContent)}</div></button>`;
+    }).join('');
+  });
+}
+['#optPick', '#lPick'].forEach(box => $(box).addEventListener('click', e => {
+  const b = e.target.closest('.sp-item'); if (!b) return;
+  const sel = box === '#optPick' ? '#optPreset' : '#lPreset';
+  $(sel).value = b.dataset.v; renderPickers();
+  const burn = box === '#optPick' ? '#optBurn' : '#lBurn';
+  if (!$(burn).checked) { $(burn).checked = true; $(burn).dispatchEvent(new Event('change')); }
+}));
+function pickedStyle(selector) {
+  const name = $(selector).value;
+  return name && presets[name] ? {...presets[name]} : chatStyle;
+}
+async function savePresets(msg) {
+  presets = (await api('/api/settings', {chat_presets: presets})).chat_presets;
+  syncPresetBar();
+  if (msg) { $('#stSaved').textContent = msg; setTimeout(() => $('#stSaved').textContent = '', 1600); }
+}
+$('#pSel').onchange = () => {
+  const n = $('#pSel').value;
+  if (!n || !presets[n]) return;
+  activePreset = n;
+  chatStyle = {...presets[n]};
+  styleChanged();
+};
+function openSaveBox() {
+  $('#pSaveBox').classList.remove('hidden'); $('#pSaveAs').classList.add('hidden');
+  $('#pName').value = '';
+  $('#pName').focus(); updateSaveLabel();
+}
+function closeSaveBox() { $('#pSaveBox').classList.add('hidden'); $('#pSaveAs').classList.remove('hidden'); }
+function updateSaveLabel() { $('#pSaveOk').textContent = presets[$('#pName').value.trim()] ? 'Replace' : 'Save'; }
+$('#pSaveAs').onclick = openSaveBox;
+$('#pSaveCancel').onclick = closeSaveBox;
+$('#pName').addEventListener('input', updateSaveLabel);
+$('#pName').addEventListener('keydown', e => { if (e.key === 'Enter') $('#pSaveOk').click(); if (e.key === 'Escape') closeSaveBox(); });
+$('#pSaveOk').onclick = async () => {
+  const name = $('#pName').value.trim();
+  if (!name) { $('#pName').focus(); return; }
+  const replaced = !!presets[name];
+  presets[name] = {...chatStyle};
+  activePreset = name;
+  closeSaveBox();
+  await savePresets(replaced ? `Replaced “${name}”` : `Saved “${name}”`);
+};
+$('#pUpdate').onclick = async () => {
+  if (!activePreset) return;
+  presets[activePreset] = {...chatStyle};
+  await savePresets(`Updated “${activePreset}”`);
+};
+$('#pDelete').onclick = async () => {
+  const b = $('#pDelete');
+  if (!b.dataset.armed) {  // two clicks to delete
+    b.dataset.armed = '1'; b.textContent = 'Click again to delete';
+    setTimeout(() => { delete b.dataset.armed; b.textContent = 'Delete'; }, 3000);
+    return;
+  }
+  delete b.dataset.armed; b.textContent = 'Delete';
+  const name = activePreset;
+  delete presets[name]; activePreset = null;
+  await savePresets(`Deleted “${name}”`);
+};
+(async () => { try { const st = await api('/api/settings'); presets = st.chat_presets || {}; chatStyle = chatStyle || st.chat_style; fillPresetPickers(); } catch {} })();
+
+/* ---------- drag the chat in the preview ---------- */
+let lastGeom = null, drag = null;
+const stChat = $('#stChat'), stStage = $('#stStage'), stBox = $('#stBox');
+stChat.addEventListener('pointerdown', e => {
+  if (!lastGeom || e.button !== 0) return;
+  e.preventDefault();
+  const sr = stStage.getBoundingClientRect(), cr = stChat.getBoundingClientRect();
+  drag = {id: e.pointerId, sx: e.clientX, sy: e.clientY, left: cr.left - sr.left, top: cr.top - sr.top,
+          sw: sr.width, sh: sr.height, cw: cr.width, ch: cr.height, side: chatStyle.layout !== 'overlay', moved: false};
+  stChat.setPointerCapture(e.pointerId);
+  stStage.classList.add('dragging');
+  stStage.classList.toggle('side', drag.side);
+});
+stChat.addEventListener('pointermove', e => {
+  if (!drag || e.pointerId !== drag.id) return;
+  const dx = e.clientX - drag.sx, dy = e.clientY - drag.sy;
+  if (Math.abs(dx) + Math.abs(dy) > 2) drag.moved = true;
+  const fx = drag.sw - drag.cw, fy = drag.sh - drag.ch;
+  const left = Math.min(Math.max(0, drag.left + dx), Math.max(0, fx));
+  if (drag.side) {
+    // Panel layouts: follow the pointer sideways; show which side it will snap to.
+    stBox.style.left = (left / drag.sw * 100) + '%';
+    const goLeft = left + drag.cw / 2 < drag.sw / 2;
+    $('#stDrop').style.left = goLeft ? '0' : '50%';
+    drag.layout = goLeft ? 'side-left' : 'side-right';
+    return;
+  }
+  const top = Math.min(Math.max(0, drag.top + dy), Math.max(0, fy));
+  stBox.style.left = (left / drag.sw * 100) + '%';
+  stBox.style.top = (top / drag.sh * 100) + '%';
+  // Position is stored as % of the free space, the same as the sliders.
+  chatStyle.x = fx > 0 ? Math.round(left / fx * 1000) / 10 : 0;
+  chatStyle.y = fy > 0 ? Math.round(top / fy * 1000) / 10 : 0;
+  fillStyle();
+});
+function endDrag(e) {
+  if (!drag || e.pointerId !== drag.id) return;
+  const d = drag; drag = null;
+  stStage.classList.remove('dragging', 'side');
+  if (!d.moved) return;
+  if (d.side && d.layout) chatStyle.layout = d.layout;
+  styleChanged();  // saves, and re-renders so the preview matches the final geometry
+}
+stChat.addEventListener('pointerup', endDrag);
+stChat.addEventListener('pointercancel', endDrag);
+/* resize handles */
+let resize = null, resizeRender = 0;
+stBox.querySelectorAll('.h').forEach(h => h.addEventListener('pointerdown', e => {
+  if (!lastGeom || e.button !== 0) return;
+  e.preventDefault(); e.stopPropagation();
+  const sr = stStage.getBoundingClientRect(), br = stBox.getBoundingClientRect(), g = lastGeom;
+  resize = {id: e.pointerId, h: h.dataset.h, sx: e.clientX, sy: e.clientY, sw: sr.width, sh: sr.height,
+            l: br.left - sr.left, t: br.top - sr.top, w: br.width, hgt: br.height,
+            vw: sr.width * g.video_w / g.out_w, vh: sr.height * g.video_h / g.out_h, side: chatStyle.layout !== 'overlay'};
+  h.setPointerCapture(e.pointerId);
+  stStage.classList.add('resizing');
+}));
+function onResizeMove(e) {
+  const r = resize;
+  if (!r || e.pointerId !== r.id) return;
+  const dx = e.clientX - r.sx, dy = e.clientY - r.sy;
+  const minW = r.vw * 0.10, maxW = r.side ? r.vw * 0.50 : r.vw * 0.50, minH = r.vh * 0.15;
+  let {l, t, w, hgt} = {l: r.l, t: r.t, w: r.w, hgt: r.hgt};
+  if (r.h.includes('e')) w = Math.min(Math.max(minW, r.w + dx), maxW, r.sw - r.l);
+  if (r.h.includes('w')) { w = Math.min(Math.max(minW, r.w - dx), maxW, r.side ? maxW : r.l + r.w); l = r.l + r.w - w; }
+  if (!r.side) {
+    if (r.h.includes('s')) hgt = Math.min(Math.max(minH, r.hgt + dy), r.sh - r.t);
+    if (r.h.includes('n')) { hgt = Math.min(Math.max(minH, r.hgt - dy), r.t + r.hgt); t = r.t + r.hgt - hgt; }
+  }
+  Object.assign(stBox.style, {left: l / r.sw * 100 + '%', top: t / r.sh * 100 + '%', width: w / r.sw * 100 + '%', height: hgt / r.sh * 100 + '%'});
+  // Convert back to the style's units: size in % of the video, position in % of the free space.
+  chatStyle.width = Math.round(w / r.vw * 1000) / 10;
+  if (!r.side) {
+    chatStyle.height = Math.round(hgt / r.vh * 1000) / 10;
+    const fx = r.vw - w, fy = r.vh - hgt;
+    chatStyle.x = fx > 0 ? Math.round(l / fx * 1000) / 10 : 0;
+    chatStyle.y = fy > 0 ? Math.round(t / fy * 1000) / 10 : 0;
+  }
+  $('#stSize').textContent = r.side ? `${Math.round(chatStyle.width)}% wide` : `${Math.round(chatStyle.width)}% × ${Math.round(chatStyle.height)}%`;
+  fillStyle();
+  // Re-render now and then while resizing so the text reflows to the new size.
+  if (performance.now() - resizeRender > 350) { resizeRender = performance.now(); renderPreview(); }
+}
+function endResize(e) {
+  if (!resize || e.pointerId !== resize.id) return;
+  resize = null;
+  stStage.classList.remove('resizing');
+  styleChanged();
+}
+stBox.querySelectorAll('.h').forEach(h => {
+  h.addEventListener('pointermove', onResizeMove);
+  h.addEventListener('pointerup', endResize);
+  h.addEventListener('pointercancel', endResize);
+});
+
+/* background: one real frame from the last fetched video (served by the app itself) */
+let bg = null, posterKey = null, frameSeq = 0;
+function applyBg() {
+  const el = $('#stBg');
+  Object.assign(el.style, bg ? {backgroundImage: `url("${bg}")`, backgroundSize: 'cover', backgroundPosition: 'center'}
+                             : {backgroundImage: '', backgroundSize: '', backgroundPosition: ''});
+}
+const FRACTIONS = [0.1, 0.3, 0.5, 0.7, 0.9];
+let posterIdx = 2, posterBase = null, posterT = null;  // start in the middle; the button cycles through the 5 points
+function posterPoints(src) {
+  // Inside the trim range if one is set for this video, otherwise across the whole video.
+  const a = parseTime($('#start').value), z = parseTime($('#end').value);
+  if (src === current && (a != null || z != null)) {
+    const lo = a ?? 0, hi = z ?? src.duration;
+    return FRACTIONS.map(f => Math.round(lo + (hi - lo) * f));
+  }
+  return src.poster_points || [src.poster_t];
+}
+async function loadPoster(next) {
+  const src = lastFetched && lastFetched.poster_t != null ? lastFetched : null;
+  $('#stNextFrame').classList.toggle('hidden', !src);
+  if (!src) {
+    bg = null; posterKey = null; applyBg();
+    $('#stBgNote').textContent = lastFetched ? `No preview frame is available for “${lastFetched.title}”.`
+      : 'Fetch a Twitch or YouTube video on the Download tab to see one of its frames behind the chat.';
+    return;
+  }
+  const pts = posterPoints(src), base = src.url + '|' + pts.join(',');
+  if (base !== posterBase) { posterBase = base; posterIdx = Math.floor(pts.length / 2); }  // new video/range
+  else if (next) posterIdx = (posterIdx + 1) % pts.length;
+  const t = pts[posterIdx], live = pts.length === 1 && t === 0, key = base + '@' + posterIdx;
+  if (key === posterKey && !(next && live)) return;
+  posterKey = key;
+  const seq = ++frameSeq;
+  const which = pts.length > 1 ? ` (${posterIdx + 1}/${pts.length})` : '';
+  $('#stBgNote').textContent = 'Loading a frame from the video…';
+  $('#stNextFrame').disabled = true;
+  try {
+    const r = await api('/api/frame', {url: src.url, t, fresh: next && live});
+    if (seq !== frameSeq) return;
+    bg = 'data:image/jpeg;base64,' + r.jpg; applyBg();
+    if (posterT !== t) { posterT = t; if (!parseTime($('#stAt').value)) renderPreview(); }
+    $('#stBgNote').textContent = live ? `Background: live frame from “${src.title}”`
+      : `Background: frame at ${fmtDur(t)}${which} from “${src.title}”`;
+    // Warm up the next frame so the button responds instantly.
+    if (!live) api('/api/frame', {url: src.url, t: pts[(posterIdx + 1) % pts.length]}).catch(() => {});
+  } catch (e) {
+    if (seq === frameSeq) { posterKey = null; $('#stBgNote').textContent = 'Could not load a frame from the video: ' + e.message; }
+  } finally {
+    if (seq === frameSeq) $('#stNextFrame').disabled = false;
+  }
+}
+$('#stNextFrame').onclick = () => loadPoster(true);
+
+// Arrow keys nudge the overlay while the preview is hovered (Shift = bigger steps).
+stStage.addEventListener('mouseenter', () => stStage._hover = true);
+stStage.addEventListener('mouseleave', () => stStage._hover = false);
+document.addEventListener('keydown', e => {
+  if (!stStage._hover || $('#tab-style').classList.contains('hidden') || chatStyle?.layout !== 'overlay') return;
+  if (['INPUT', 'SELECT', 'TEXTAREA'].includes(document.activeElement?.tagName)) return;
+  const step = e.shiftKey ? 5 : 0.5, k = {ArrowLeft: ['x', -step], ArrowRight: ['x', step], ArrowUp: ['y', -step], ArrowDown: ['y', step]}[e.key];
+  if (!k) return;
+  e.preventDefault();
+  chatStyle[k[0]] = Math.min(100, Math.max(0, Math.round((chatStyle[k[0]] + k[1]) * 10) / 10));
+  styleChanged();
+});
+
+/* ---------- settings ---------- */
+$('#openFolder').onclick = $('#disk').onclick = () => api('/api/reveal', {});
+const gb = n => n >= 1e12 ? (n / 1e12).toFixed(1) + ' TB' : Math.round(n / 1e9) + ' GB';
+const shortPath = p => { const h = p.replace(/^\/Users\/[^/]+/, '~').replace(/^[A-Za-z]:\\Users\\[^\\]+/, '~'), parts = h.split(/[\\/]/).filter(Boolean);
+  return parts.length > 3 ? '…/' + parts.slice(-2).join('/') : h; };
+// Download page folder: starts as the Settings folder; picking one also makes it the new default.
+// The same folder button sits on the Download and Live pages.
+function showDlDir(p) {
+  dlDir = p;
+  document.querySelectorAll('.folderbtn').forEach(b => { b.querySelector('.dirtxt').textContent = shortPath(p); b.title = `Saving to ${p} (click to change)`; });
+}
+document.querySelectorAll('.folderbtn').forEach(btn => btn.onclick = async () => {
+  if (!hasFolderPicker()) { $('#settingsBtn').click(); return; }
+  btn.disabled = true;
+  try {
+    const p = await pickFolder(dlDir);
+    if (p) { showDlDir(p); await api('/api/settings', {output_dir: p}); loadDisk(); }
+  } finally { btn.disabled = false; }
+});
+async function loadDisk() {
+  try {
+    const d = await api('/api/disk', {});
+    if (d.path) showDlDir(d.path);
+    const parts = d.path.replace(/^\/Users\/[^/]+/, '~').split(/[\\/]/).filter(Boolean);
+    $('#diskPath').textContent = parts.length > 3 ? '…/' + parts.slice(-2).join('/') : d.path.replace(/^\/Users\/[^/]+/, '~');
+    $('#disk').title = d.path;
+    if (d.total) { $('#diskBar').style.width = (1 - d.free / d.total) * 100 + '%'; $('#diskFree').textContent = `${gb(d.free)} free of ${gb(d.total)}`; }
+    else $('#diskFree').textContent = d.error || '';
+  } catch {}
+}
+loadDisk(); setInterval(loadDisk, 60000);
+// Update notice: the engine asks GitHub for the latest release (cached 6 h there).
+async function checkUpdate() {
+  try {
+    const u = await api('/api/update');
+    $('#sVersion').textContent = 'StreamGrab ' + u.current;
+    if (u.newer && u.url) { $('#updNote').href = u.url; $('#updVer').textContent = `Version ${u.latest} · download`; $('#updNote').classList.remove('hidden'); }
+  } catch {}
+}
+checkUpdate(); setInterval(checkUpdate, 6 * 3600 * 1000);
+$('#settingsBtn').onclick = async () => {
+  const s = await api('/api/settings');
+  $('#sDir').value = s.output_dir; $('#sSub').checked = s.subfolder_per_channel;
+  $('#sPar').value = s.max_parallel; $('#sFrag').value = s.fragments; $('#sChat').value = s.chat_workers;
+  $('#sEnc').value = s.bake_encoder || 'fast'; $('#sConn').value = s.download_connections || 12;
+  $('#settings').showModal();
+};
+// Native folder picker: the macOS app's own dialog, or the system dialog via the engine on Windows.
+let platform = '';
+let folderResolve = null;
+window.nativeFolderPicked = path => { if (folderResolve) { folderResolve(path); folderResolve = null; } };
+const hasFolderPicker = () => !!(window.STREAMGRAB_NATIVE && window.webkit?.messageHandlers?.native) || platform === 'windows';
+async function pickFolder(current) {
+  if (window.STREAMGRAB_NATIVE && window.webkit?.messageHandlers?.native) {
+    return new Promise(resolve => {
+      folderResolve = resolve;
+      window.webkit.messageHandlers.native.postMessage({type: 'pickFolder', current: current || ''});
+    });
+  }
+  if (platform === 'windows') return (await api('/api/pickfolder', {current: current || ''})).path || '';
+  return '';
+}
+function folderButtons() {
+  $('#sPick').classList.toggle('hidden', !hasFolderPicker());
+  $('#cFolderPick').classList.toggle('hidden', !hasFolderPicker());
+}
+$('#sPick').onclick = async () => {
+  $('#sPick').disabled = true;
+  try { const p = await pickFolder($('#sDir').value); if (p) $('#sDir').value = p; } finally { $('#sPick').disabled = false; }
+};
+api('/api/settings').then(s => {
+  if (s.platform !== 'windows') return;
+  const hw = document.querySelector('#sEnc option[value=hardware]');
+  if (hw) hw.textContent = 'Hardware encoder (NVIDIA / Intel / AMD GPU): leaves the CPU free';
+}).catch(() => {});
+$('#sCancel').onclick = () => $('#settings').close();
+$('#sSave').onclick = async () => {
+  await api('/api/settings', {output_dir: $('#sDir').value, subfolder_per_channel: $('#sSub').checked,
+    max_parallel: +$('#sPar').value || 2, fragments: +$('#sFrag').value || 8, chat_workers: +$('#sChat').value || 8,
+    bake_encoder: $('#sEnc').value, download_connections: Math.min(32, Math.max(1, +$('#sConn').value || 12))});
+  $('#settings').close(); loadDisk();
+};
+
+/* ---------- audio converter ---------- */
+const conv = {files: [], formats: {}};
+const CONV_PREF = 'sg.convert';
+const kb = n => n > 1e9 ? (n / 1073741824).toFixed(2) + ' GB' : n > 1e6 ? (n / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB';
+function convDetails(f) {
+  if (f.error) return f.error;
+  if (f.uploading != null) return `Adding… ${Math.round(f.uploading * 100)}%`;
+  const bits = [f.codec.replace(/^pcm_.*/, 'PCM').toUpperCase(),
+    f.sample_rate ? (f.sample_rate / 1000).toFixed(f.sample_rate % 1000 ? 1 : 0) + ' kHz' : '',
+    f.bits ? f.bits + '-bit' : f.bitrate ? Math.round(f.bitrate / 1000) + ' kbps' : '',
+    f.channels === 1 ? 'mono' : f.channels === 2 ? 'stereo' : f.channels ? f.channels + ' ch' : '',
+    fmtDur(f.duration), kb(f.size)];
+  return bits.filter(Boolean).join(' · ') + (f.uploaded && $('#cDest').value === 'same' ? ' · saves to StreamGrab folder › Converted' : '');
+}
+function convRender() {
+  $('#cList').innerHTML = conv.files.map((f, i) => `<div class="frow ${f.error ? 'bad' : ''}">
+    <span class="fmtbadge ${f.lossless ? 'll' : ''}">${esc((f.name.split('.').pop() || '?').toUpperCase())}</span>
+    <div class="grow" style="min-width:0"><div class="nm" title="${esc(f.path || f.name)}">${esc(f.name)}</div><div class="dt">${esc(convDetails(f))}</div></div>
+    <button class="x" data-i="${i}" title="Remove">✕</button></div>`).join('');
+  const ready = conv.files.filter(f => f.path && !f.error && f.uploading == null);
+  $('#cClear').classList.toggle('hidden', !conv.files.length);
+  const needFolder = $('#cDest').value === 'custom' && !$('#cFolder').value.trim();
+  $('#cBtn').disabled = !ready.length || needFolder;
+  $('#cBtn').textContent = ready.length > 1 ? `Convert ${ready.length} files` : 'Convert';
+  const fmtSel = $('#cFmt').selectedOptions[0];
+  $('#cSum').textContent = !conv.files.length ? 'No files added' : `${ready.length} file${ready.length === 1 ? '' : 's'} → ${fmtSel ? fmtSel.textContent : ''}${$('#cQualF').classList.contains('hidden') ? '' : ' · ' + ($('#cQual').selectedOptions[0]?.textContent || '')}`;
+  const fmt = conv.formats[$('#cFmt').value];
+  const lossyIn = ready.some(f => !f.lossless);
+  $('#cHint').textContent = needFolder && ready.length ? 'Choose a folder for the converted files.' : fmt && fmt.lossless && lossyIn
+    ? 'Lossless output keeps the sound exactly as it is now, but can’t restore detail an MP3/AAC/OGG source already lost.'
+    : fmt && !fmt.lossless ? 'Lossy formats are smaller; higher bitrates sound closer to the original.' : '';
+}
+$('#cList').addEventListener('click', e => { if (e.target.dataset.i != null) { conv.files.splice(+e.target.dataset.i, 1); convRender(); } });
+$('#cClear').onclick = () => { conv.files = []; convRender(); };
+
+async function convAddPaths(paths) {
+  paths = paths.filter(p => !conv.files.some(f => f.path === p));
+  if (!paths.length) return;
+  const rows = paths.map(p => ({path: p, name: p.split(/[\\/]/).pop(), codec: '', uploading: 0}));
+  conv.files.push(...rows); convRender();
+  const info = await api('/api/audio/probe', {paths});
+  info.forEach((d, k) => Object.assign(rows[k], d, {uploading: null}));
+  convRender();
+}
+function convUpload(file) {
+  if (conv.files.some(f => f.uploaded && f.name === file.name && f.size === file.size && f.mtime === file.lastModified)) return;
+  const row = {name: file.name, size: file.size, mtime: file.lastModified, codec: '', uploading: 0, uploaded: true};
+  conv.files.push(row); convRender();
+  const xhr = new XMLHttpRequest();
+  xhr.open('PUT', '/api/upload?name=' + encodeURIComponent(file.name));
+  xhr.upload.onprogress = e => { if (e.lengthComputable) { row.uploading = e.loaded / e.total; convRender(); } };
+  xhr.onload = async () => {
+    try {
+      const r = JSON.parse(xhr.responseText);
+      if (xhr.status !== 200) throw new Error(r.error || 'upload failed');
+      const [d] = await api('/api/audio/probe', {paths: [r.path]});
+      Object.assign(row, d, {name: file.name, size: file.size, uploading: null});
+    } catch (err) { Object.assign(row, {error: String(err.message || err), uploading: null}); }
+    convRender();
+  };
+  xhr.onerror = () => { Object.assign(row, {error: 'Could not add this file', uploading: null}); convRender(); };
+  xhr.send(file);
+}
+$('#cFolderPick').onclick = async () => {
+  $('#cFolderPick').disabled = true;
+  try { const p = await pickFolder($('#cFolder').value); if (p) { $('#cFolder').value = p; convSavePrefs(); convRender(); } }
+  finally { $('#cFolderPick').disabled = false; }
+};
+$('#cFolder').addEventListener('input', () => { convSavePrefs(); convRender(); });
+$('#cPick').onclick = async () => {
+  if (window.STREAMGRAB_NATIVE && window.webkit?.messageHandlers?.native) {
+    window.webkit.messageHandlers.native.postMessage({type: 'pickFiles'});
+  } else if (platform === 'windows') {
+    $('#cPick').disabled = true;
+    try { const r = await api('/api/pickfiles', {}); convAddPaths(r.paths || []); } finally { $('#cPick').disabled = false; }
+  } else {
+    $('#cInput').click();
+  }
+};
+window.nativeFilesPicked = paths => convAddPaths(paths);
+$('#cInput').onchange = () => { [...$('#cInput').files].forEach(convUpload); $('#cInput').value = ''; };
+const drop = $('#cDrop');
+['dragenter', 'dragover'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('over'); }));
+['dragleave', 'drop'].forEach(ev => drop.addEventListener(ev, () => drop.classList.remove('over')));
+// The drop itself is handled once, by the window listener below (the zone's drop bubbles up to it).
+// Don't let a file dropped anywhere else replace the app with the file.
+window.addEventListener('dragover', e => e.preventDefault());
+window.addEventListener('drop', e => { e.preventDefault(); if (!$('#tab-convert').classList.contains('hidden') && e.dataTransfer.files.length) [...e.dataTransfer.files].forEach(convUpload); });
+
+function convOptions() {
+  const fmt = conv.formats[$('#cFmt').value];
+  if (!fmt) return;
+  $('#cQualF').classList.toggle('hidden', fmt.lossless);
+  $('#cDepthF').classList.toggle('hidden', !fmt.lossless);
+  document.querySelectorAll('#cDepth .wav-only').forEach(o => o.disabled = $('#cFmt').value !== 'wav');
+  if ($('#cDepth').selectedOptions[0]?.disabled) $('#cDepth').value = 'auto';
+  const q = $('#cQual'), keep = q.value;
+  q.innerHTML = '';
+  (fmt.qualities || []).forEach(([v, l]) => q.add(new Option(l, v)));
+  q.value = (fmt.qualities || []).some(([v]) => v === keep) ? keep : fmt.default || '';
+  convRender();
+}
+function convSavePrefs() {
+  localStorage.setItem(CONV_PREF, JSON.stringify({fmt: $('#cFmt').value, qual: $('#cQual').value, depth: $('#cDepth').value,
+    rate: $('#cRate').value, ch: $('#cCh').value, dest: $('#cDest').value, folder: $('#cFolder').value, cover: $('#cCover').checked}));
+}
+['#cFmt', '#cQual', '#cDepth', '#cRate', '#cCh', '#cDest', '#cCover'].forEach(id => $(id).addEventListener('change', () => {
+  if (id === '#cFmt') convOptions();
+  if (id === '#cDest') { $('#cFolderRow').classList.toggle('hidden', $('#cDest').value !== 'custom'); if ($('#cDest').value === 'custom' && !$('#cFolder').value) $('#cFolderPick').click(); }
+  convSavePrefs(); convRender();
+}));
+$('#cBtn').onclick = async () => {
+  const ready = conv.files.filter(f => f.path && !f.error && f.uploading == null);
+  if (!ready.length) return;
+  $('#cBtn').disabled = true;
+  try {
+    await api('/api/convert', {paths: ready.map(f => f.path), format: $('#cFmt').value, quality: $('#cQual').value,
+      depth: $('#cDepth').value, sample_rate: $('#cRate').value, channels: $('#cCh').value, dest: $('#cDest').value,
+      folder: $('#cFolder').value.trim(),
+      cover: $('#cCover').checked});
+    conv.files = conv.files.filter(f => !ready.includes(f));
+    refresh();
+  } catch (err) { $('#cHint').textContent = String(err.message || err); }
+  convRender();
+};
+(async () => {
+  try {
+    const [r, s] = await Promise.all([api('/api/audio/formats'), api('/api/settings')]);
+    platform = s.platform || '';
+    folderButtons();
+    conv.formats = r.formats;
+    Object.entries(r.formats).forEach(([k, f]) => $('#cFmt').add(new Option(f.label, k)));
+    const p = JSON.parse(localStorage.getItem(CONV_PREF) || '{}');
+    $('#cFmt').value = p.fmt && r.formats[p.fmt] ? p.fmt : 'mp3';
+    convOptions();
+    if (p.qual) $('#cQual').value = [...$('#cQual').options].some(o => o.value === p.qual) ? p.qual : $('#cQual').value;
+    ['depth:#cDepth', 'rate:#cRate', 'ch:#cCh', 'dest:#cDest'].forEach(x => { const [k, id] = x.split(':'); if (p[k] != null) $(id).value = p[k]; });
+    if (p.cover === false) $('#cCover').checked = false;
+    if (p.folder) $('#cFolder').value = p.folder;
+    $('#cFolderRow').classList.toggle('hidden', $('#cDest').value !== 'custom');
+    folderButtons();
+    convRender();
+  } catch {}
+})();
+burnState(); dlSummary();
+</script>
+</body>
+</html>

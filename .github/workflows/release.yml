@@ -1,0 +1,157 @@
+# Builds the Mac and Windows installers, tests each package, and publishes a GitHub Release.
+#
+# Runs when:
+#   - a version tag is pushed (git tag v1.0.2 && git push origin v1.0.2): build, test, release
+#   - started by hand from the Actions tab: build + test, and release only if "publish" is ticked
+#   - called by update-ytdlp.yml after it bumps the version for a new yt-dlp
+# The tag must match the VERSION file.
+name: Build and release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: "Publish a GitHub Release for the version in VERSION"
+        type: boolean
+        default: false
+  workflow_call:
+    inputs:
+      ref:
+        description: "Tag to build"
+        type: string
+        required: true
+      publish:
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ inputs.ref || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  mac:
+    name: Mac (Apple Silicon)
+    runs-on: macos-14
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+      - name: Download bundled components
+        run: macos/fetch_vendor.sh
+      - name: Build DMG
+        run: macos/make_dmg.sh
+      - name: Smoke test the packaged app
+        run: |
+          VERSION=$(tr -d '[:space:]' < VERSION)
+          MNT=$(hdiutil attach -nobrowse -readonly "dist/mac/StreamGrab-$VERSION.dmg" | awk -F'\t' '/Volumes/{print $NF}')
+          APP="$RUNNER_TEMP/StreamGrab.app"
+          ditto "$MNT/StreamGrab.app" "$APP"
+          hdiutil detach "$MNT" -quiet
+          codesign --verify --deep --strict "$APP"
+          R="$APP/Contents/Resources"
+          # Only the app's own tools: nothing from Homebrew on the runner.
+          env PATH=/usr/bin:/bin python3 tests/smoke.py --python "$R/python/bin/python3" --app "$R/app" --bin "$R/bin"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mac
+          path: dist/mac/*.dmg
+          if-no-files-found: error
+
+  windows-build:
+    name: Windows (build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+      - name: Install NSIS
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq nsis zip locales
+          sudo locale-gen en_US.UTF-8
+      - name: Download bundled components
+        run: windows/fetch_vendor.sh
+      - name: Build installer and portable zip
+        run: windows/build.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: |
+            dist/windows/*.exe
+            dist/windows/*.zip
+          if-no-files-found: error
+
+  windows-test:
+    name: Windows (test on Windows)
+    needs: windows-build
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows
+          path: pkg
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Unzip the portable build
+        shell: pwsh
+        run: Expand-Archive -Path (Get-ChildItem pkg\StreamGrab-Portable-*.zip).FullName -DestinationPath portable
+      - name: Smoke test the packaged app
+        shell: pwsh
+        run: python tests/smoke.py --python portable\StreamGrab\python\python.exe --app portable\StreamGrab\app --bin portable\StreamGrab\bin
+      - name: Installer runs silently
+        shell: pwsh
+        run: |
+          $setup = (Get-ChildItem pkg\StreamGrab-Setup-*.exe).FullName
+          Start-Process $setup -ArgumentList '/S' -Wait
+          if (!(Test-Path "$env:LOCALAPPDATA\Programs\StreamGrab\StreamGrab.exe")) { throw "not installed" }
+          Write-Host "Installed to $env:LOCALAPPDATA\Programs\StreamGrab"
+
+  release:
+    name: Publish release
+    needs: [mac, windows-test]
+    if: ${{ startsWith(github.ref, 'refs/tags/v') || inputs.publish }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+      - uses: actions/download-artifact@v4
+        with:
+          path: assets
+          merge-multiple: true
+      - name: Create or update the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION=$(tr -d '[:space:]' < VERSION)
+          TAG="v$VERSION"
+          REF="${{ inputs.ref || github.ref_name }}"
+          if [ "${REF#refs/tags/}" != "$TAG" ] && [ "${{ github.event_name }}" = "push" ]; then
+            echo "Tag ${REF} doesn't match VERSION ($VERSION)" >&2; exit 1
+          fi
+          YTDLP=$(gh api repos/yt-dlp/yt-dlp/releases/latest --jq .tag_name)
+          cat > notes.md <<EOF
+          **Mac** (Apple Silicon, macOS 12+): download \`StreamGrab-$VERSION.dmg\`, open it and drag StreamGrab to Applications. The first time, allow it in System Settings → Privacy & Security → Open Anyway.
+
+          **Windows** (10/11, 64-bit): \`StreamGrab-Setup-$VERSION.exe\` installs it (no admin needed); \`StreamGrab-Portable-$VERSION.zip\` runs without installing. If SmartScreen appears: More info → Run anyway.
+
+          Bundles yt-dlp $YTDLP.
+          EOF
+          sed -i 's/^          //' notes.md
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" assets/* --clobber
+          else
+            gh release create "$TAG" assets/* --title "StreamGrab $VERSION" --notes-file notes.md --generate-notes --target "$(git rev-parse HEAD)"
+          fi

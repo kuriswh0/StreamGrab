@@ -1,0 +1,50 @@
+# Weekly: if yt-dlp has a new release, bump StreamGrab's patch version (1.0.1 -> 1.0.2), tag it,
+# and build + publish a new release that bundles it. Users then see "Update available" in the app.
+# Can also be started by hand from the Actions tab.
+name: Update yt-dlp
+
+on:
+  schedule:
+    - cron: "17 6 * * 1"   # Mondays 06:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.bump.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Bump the version if yt-dlp is newer than the last build
+        id: bump
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          LATEST=$(gh api repos/yt-dlp/yt-dlp/releases/latest --jq .tag_name)
+          BUILT=$(tr -d '[:space:]' < .github/yt-dlp-version 2>/dev/null || true)
+          echo "yt-dlp latest: $LATEST, last bundled: ${BUILT:-none}"
+          if [ "$LATEST" = "$BUILT" ]; then echo "Nothing to do."; exit 0; fi
+          OLD=$(tr -d '[:space:]' < VERSION)
+          NEW=$(echo "$OLD" | awk -F. '{printf "%d.%d.%d", $1, $2, $3 + 1}')
+          echo "$NEW" > VERSION
+          echo "$LATEST" > .github/yt-dlp-version
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add VERSION .github/yt-dlp-version
+          git commit -m "Update yt-dlp to $LATEST (StreamGrab $NEW)"
+          git tag "v$NEW"
+          git push origin main "v$NEW"
+          echo "tag=v$NEW" >> "$GITHUB_OUTPUT"
+
+  release:
+    needs: bump
+    if: ${{ needs.bump.outputs.tag != '' }}
+    uses: ./.github/workflows/release.yml
+    with:
+      ref: ${{ needs.bump.outputs.tag }}
+      publish: true

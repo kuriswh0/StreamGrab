@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>{{TITLE}} — chat replay</title>
+<style>
+  :root { --bg:#0e0e10; --panel:#18181b; --line:#2a2a2e; --text:#efeff1; --dim:#adadb8; --accent:#a970ff; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; height:100vh; display:flex; flex-direction:column; }
+  header { padding:10px 16px; border-bottom:1px solid var(--line); display:flex; gap:12px; align-items:center; }
+  header h1 { font-size:15px; margin:0; flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  header input { background:var(--panel); border:1px solid var(--line); color:var(--text); border-radius:6px; padding:6px 10px; width:220px; }
+  main { flex:1; display:flex; min-height:0; }
+  #player { flex:1; background:#000; display:flex; align-items:center; justify-content:center; min-width:0; }
+  #player video { max-width:100%; max-height:100%; }
+  #chat { width:380px; background:var(--panel); border-left:1px solid var(--line); overflow-y:auto; padding:8px 0; }
+  body.novideo #player { display:none; }
+  body.novideo #chat { width:100%; max-width:900px; margin:0 auto; border:none; }
+  .m { padding:3px 14px; word-wrap:break-word; }
+  .m:hover { background:#26262c; }
+  .ts { color:var(--dim); font-size:12px; margin-right:6px; font-variant-numeric:tabular-nums; cursor:pointer; }
+  .u { font-weight:700; }
+  .b { display:inline-block; font-size:10px; padding:0 4px; border-radius:3px; background:#3a3a3d; color:var(--dim); margin-right:3px; vertical-align:1px; text-transform:uppercase; }
+  .b.moderator{background:#00ad03;color:#fff} .b.broadcaster,.b.owner{background:#e91916;color:#fff} .b.vip{background:#e005b9;color:#fff} .b.subscriber,.b.member{background:var(--accent);color:#fff}
+  img.e { height:24px; vertical-align:middle; margin:-4px 0; }
+  #count { color:var(--dim); font-size:12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>{{TITLE}}</h1>
+  <span id="count"></span>
+  <input id="q" placeholder="Filter chat (user or text)…">
+</header>
+<main>
+  <div id="player"><video id="v" controls src="{{VIDEO}}"></video></div>
+  <div id="chat"></div>
+</main>
+<script>
+const DATA = {{DATA}};
+const msgs = DATA.messages, offset = DATA.offset || 0;
+const chatEl = document.getElementById('chat'), video = document.getElementById('v');
+const hasVideo = video.getAttribute('src') !== '';
+const fallbackColors = ['#FF0000','#0000FF','#00FF00','#B22222','#FF7F50','#9ACD32','#FF4500','#2E8B57','#DAA520','#D2691E','#5F9EA0','#1E90FF','#FF69B4','#8A2BE2','#00FF7F'];
+const colorFor = m => m.color || fallbackColors[[...m.user].reduce((a, c) => a + c.charCodeAt(0), 0) % fallbackColors.length];
+const fmt = s => { s = Math.max(0, Math.floor(s)); return `${Math.floor(s/3600)}:${String(Math.floor(s%3600/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`; };
+const esc = s => s.replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+function render(m) {
+  const d = document.createElement('div');
+  d.className = 'm';
+  const rel = m.t - offset;
+  d.innerHTML = `<span class="ts" data-t="${rel}">${fmt(rel)}</span>` +
+    m.badges.map(b => b.split('/')[0]).map(b => `<span class="b ${esc(b)}">${esc(b.replace(/[_-]/g,' ').slice(0,10))}</span>`).join('') +
+    `<span class="u" style="color:${esc(colorFor(m))}">${esc(m.user)}</span>: ` +
+    m.parts.map(p => p.emote !== undefined
+      ? (p.url ? `<img class="e" src="${esc(p.url)}" alt="${esc(p.emote)}" title="${esc(p.emote)}">` : esc(p.emote))
+      : esc(p.text)).join('');
+  return d;
+}
+chatEl.addEventListener('click', e => {
+  if (e.target.classList.contains('ts') && hasVideo) { video.currentTime = +e.target.dataset.t; video.play(); }
+});
+
+const q = document.getElementById('q');
+const count = document.getElementById('count');
+function matches(m, needle) {
+  return !needle || m.user.toLowerCase().includes(needle) ||
+    m.parts.some(p => (p.text || p.emote || '').toLowerCase().includes(needle));
+}
+
+let syncOn = hasVideo;
+function staticMode() {
+  syncOn = false;
+  document.body.classList.add('novideo');
+  // Static mode: render everything (in batches so huge chats stay responsive).
+  function renderAll() {
+    const needle = q.value.trim().toLowerCase();
+    chatEl.textContent = '';
+    const list = msgs.filter(m => matches(m, needle));
+    count.textContent = `${list.length.toLocaleString()} messages`;
+    let i = 0;
+    (function batch() {
+      const frag = document.createDocumentFragment();
+      for (const end = Math.min(i + 2000, list.length); i < end; i++) frag.appendChild(render(list[i]));
+      chatEl.appendChild(frag);
+      if (i < list.length) requestAnimationFrame(batch);
+    })();
+  }
+  q.addEventListener('input', () => { if (syncOn) return; clearTimeout(q._t); q._t = setTimeout(renderAll, 250); });
+  renderAll();
+}
+if (!hasVideo) staticMode();
+else {
+  // Synced mode: show messages up to the current playback time.
+  const MAX = 200;
+  let shown = 0;
+  count.textContent = `${msgs.length.toLocaleString()} messages`;
+  const idxAt = t => { let lo = 0, hi = msgs.length; while (lo < hi) { const mid = (lo + hi) >> 1; if (msgs[mid].t - offset <= t) lo = mid + 1; else hi = mid; } return lo; };
+  function sync(force) {
+    const needle = q.value.trim().toLowerCase();
+    const target = idxAt(video.currentTime);
+    const atBottom = chatEl.scrollHeight - chatEl.scrollTop - chatEl.clientHeight < 60;
+    if (force || target < shown || target - shown > MAX) {
+      chatEl.textContent = '';
+      shown = Math.max(0, target - MAX * 3);
+    }
+    const frag = document.createDocumentFragment();
+    for (; shown < target; shown++) if (matches(msgs[shown], needle)) frag.appendChild(render(msgs[shown]));
+    chatEl.appendChild(frag);
+    while (chatEl.childElementCount > MAX) chatEl.firstChild.remove();
+    if (atBottom || force) chatEl.scrollTop = chatEl.scrollHeight;
+  }
+  video.addEventListener('timeupdate', () => sync(false));
+  video.addEventListener('seeked', () => sync(true));
+  q.addEventListener('input', () => { if (syncOn) sync(true); });
+  // Video missing or moved: fall back to the full static chat log.
+  video.addEventListener('error', staticMode);
+}
+</script>
+</body>
+</html>

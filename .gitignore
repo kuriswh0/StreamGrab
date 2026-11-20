@@ -1,0 +1,13 @@
+# Build output (installers are published as GitHub Releases, not committed)
+dist/
+build/
+bin/
+
+# Bundled third-party tools, downloaded at build time by macos/fetch_vendor.sh and windows/fetch_vendor.sh
+macos/vendor/
+windows/vendor/
+
+# Local / editor files
+__pycache__/
+*.pyc
+.DS_Store

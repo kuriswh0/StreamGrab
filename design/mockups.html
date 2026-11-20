@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>StreamGrab: UI redesign mockups</title>
+<style>
+  :root {
+    --bg:#09090c; --s1:#111116; --s2:#17171d; --s3:#1e1e26; --line:#26262f; --line2:#33333d;
+    --text:#ededf2; --dim:#8b8b99; --dim2:#5f5f6b;
+    --accent:#9b5cff; --accent2:#7c3aed; --glow:rgba(155,92,255,.18);
+    --yt:#ff2d55; --ok:#34d399; --err:#f87171; --rec:#ef4444; --warn:#fbbf24;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:#050507; color:var(--text); font:13px/1.45 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif; }
+  .picker { position:sticky; top:0; z-index:50; display:flex; gap:8px; align-items:center; padding:12px 20px; background:#050507ee; backdrop-filter:blur(8px); border-bottom:1px solid #1a1a20; }
+  .picker b { margin-right:10px; font-size:14px; }
+  .picker button { background:#16161b; color:var(--dim); border:1px solid #26262f; padding:7px 14px; border-radius:20px; font:inherit; font-weight:600; cursor:pointer; }
+  .picker button.on { background:var(--accent); color:#fff; border-color:var(--accent); }
+  .picker .note { margin-left:auto; color:var(--dim); font-size:12px; max-width:560px; text-align:right; }
+  .stage { padding:22px 20px 40px; display:flex; flex-direction:column; align-items:center; gap:14px; }
+  .desc { max-width:1320px; width:100%; color:var(--dim); font-size:13px; }
+  .desc h3 { color:var(--text); margin:0 0 4px; font-size:16px; }
+  .desc ul { margin:6px 0 0; padding-left:18px; }
+  .mock { display:none; } .mock.on { display:flex; }
+
+  /* window chrome */
+  .win { width:1320px; height:820px; flex-shrink:0; background:var(--bg); border:1px solid #2a2a33; border-radius:12px; overflow:hidden; flex-direction:column; box-shadow:0 30px 80px #000a; }
+  .titlebar { height:34px; flex-shrink:0; display:flex; align-items:center; gap:8px; padding:0 14px; background:var(--s1); border-bottom:1px solid var(--line); }
+  .titlebar i { width:12px; height:12px; border-radius:50%; display:block; }
+  .titlebar i:nth-child(1){background:#ff5f57}.titlebar i:nth-child(2){background:#febc2e}.titlebar i:nth-child(3){background:#28c840}
+  .titlebar span { flex:1; text-align:center; color:var(--dim); font-size:12px; font-weight:600; margin-right:52px; }
+
+  /* shared bits */
+  .logo { font-weight:800; font-size:15px; letter-spacing:.2px; display:flex; align-items:center; gap:8px; }
+  .logo .mark { width:24px; height:24px; border-radius:7px; background:linear-gradient(135deg,#a970ff,#6d28d9); display:grid; place-items:center; font-size:12px; }
+  .logo em { font-style:normal; color:var(--accent); }
+  .btn { background:var(--accent); color:#fff; border:none; border-radius:9px; padding:9px 16px; font:inherit; font-weight:700; cursor:pointer; white-space:nowrap; display:inline-flex; align-items:center; gap:7px; }
+  .btn.lg { padding:11px 22px; font-size:14px; border-radius:10px; box-shadow:0 6px 20px var(--glow); }
+  .btn.sec { background:var(--s3); border:1px solid var(--line2); color:var(--text); }
+  .btn.ghost { background:none; color:var(--dim); }
+  .btn.sm { padding:5px 10px; font-size:12px; border-radius:7px; }
+  .btn.rec { background:var(--rec); }
+  .input { background:var(--s1); border:1px solid var(--line2); border-radius:10px; padding:10px 12px; color:var(--text); display:flex; align-items:center; gap:10px; }
+  .input .ph { color:var(--dim2); flex:1; }
+  .input .val { flex:1; }
+  .kbd { font-size:11px; color:var(--dim); border:1px solid var(--line2); border-radius:5px; padding:1px 6px; }
+  .pill { font-size:10px; font-weight:800; padding:2px 7px; border-radius:20px; text-transform:uppercase; letter-spacing:.3px; background:var(--line2); color:var(--text); }
+  .pill.tw { background:var(--accent); } .pill.yt { background:var(--yt); } .pill.live { background:var(--rec); }
+  .pill.ok { background:#12352a; color:var(--ok); }
+  .lbl { font-size:11px; font-weight:700; color:var(--dim); text-transform:uppercase; letter-spacing:.6px; }
+  .seg { display:flex; background:var(--s1); border:1px solid var(--line2); border-radius:9px; padding:3px; gap:2px; }
+  .seg span { flex:1; text-align:center; padding:6px 10px; border-radius:6px; color:var(--dim); font-weight:600; font-size:12px; white-space:nowrap; }
+  .seg span.on { background:var(--s3); color:var(--text); box-shadow:0 1px 0 #ffffff10 inset, 0 1px 3px #0006; }
+  .chip { display:inline-flex; align-items:center; gap:6px; padding:6px 11px; border-radius:20px; border:1px solid var(--line2); background:var(--s1); color:var(--dim); font-weight:600; font-size:12px; }
+  .chip.on { border-color:#9b5cff80; background:#9b5cff1f; color:#d8c3ff; }
+  .chip.on::before { content:"✓"; font-size:11px; }
+  .switch { width:34px; height:20px; border-radius:20px; background:var(--line2); position:relative; flex-shrink:0; }
+  .switch::after { content:""; position:absolute; top:3px; left:3px; width:14px; height:14px; border-radius:50%; background:#fff; }
+  .switch.on { background:var(--accent); } .switch.on::after { left:17px; }
+  .bar { height:5px; background:var(--line); border-radius:4px; overflow:hidden; }
+  .bar > div { height:100%; background:linear-gradient(90deg,#7c3aed,#b085ff); border-radius:4px; }
+  .bar.ok > div { background:var(--ok); } .bar.rec > div { background:var(--rec); width:100%; animation:pulse 1.6s infinite; }
+  @keyframes pulse { 50% { opacity:.4; } }
+  .thumb { border-radius:8px; aspect-ratio:16/9; position:relative; overflow:hidden; flex-shrink:0; }
+  .thumb .dur { position:absolute; right:6px; bottom:6px; background:#000b; font-size:10px; font-weight:700; padding:1px 5px; border-radius:4px; }
+  .thumb .ic { position:absolute; inset:0; display:grid; place-items:center; font-size:22px; opacity:.85; }
+  .g1 { background:radial-gradient(circle at 30% 30%,#7c3aed,#1e1036 70%); }
+  .g2 { background:radial-gradient(circle at 70% 40%,#0ea5e9,#0b1a2e 70%); }
+  .g3 { background:radial-gradient(circle at 40% 60%,#f97316,#2b130a 70%); }
+  .g4 { background:radial-gradient(circle at 60% 30%,#10b981,#0a221a 70%); }
+  .g5 { background:radial-gradient(circle at 50% 50%,#ef4444,#2a0b0b 70%); }
+  .g6 { background:radial-gradient(circle at 20% 70%,#ec4899,#2a0a1c 70%); }
+  .g7 { background:linear-gradient(135deg,#312e81,#111827); }
+  .muted { color:var(--dim); } .tiny { font-size:11px; } .b { font-weight:700; }
+  .row { display:flex; align-items:center; gap:10px; } .col { display:flex; flex-direction:column; } .grow { flex:1; min-width:0; }
+  .ell { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .card { background:var(--s2); border:1px solid var(--line); border-radius:14px; }
+
+  /* ============ A: Sidebar studio ============ */
+  .A { display:flex; flex:1; min-height:0; }
+  .A .side { width:208px; background:var(--s1); border-right:1px solid var(--line); padding:16px 12px; display:flex; flex-direction:column; gap:3px; }
+  .A .side .logo { padding:2px 8px 16px; }
+  .A .nav { display:flex; align-items:center; gap:11px; padding:8px 10px; border-radius:8px; color:var(--dim); font-weight:600; }
+  .A .nav .i { width:18px; text-align:center; }
+  .A .nav.on { background:var(--s3); color:var(--text); box-shadow:inset 2px 0 0 var(--accent); }
+  .A .nav .badge { margin-left:auto; font-size:10px; background:var(--accent); color:#fff; padding:0 6px; border-radius:10px; font-weight:800; }
+  .A .side .sep { height:1px; background:var(--line); margin:10px 6px; }
+  .A .disk { margin-top:auto; padding:12px; border-radius:10px; background:var(--s2); border:1px solid var(--line); }
+  .A main { flex:1; min-width:0; display:flex; flex-direction:column; }
+  .A .top { padding:18px 24px 14px; display:flex; flex-direction:column; gap:12px; }
+  .A .top h1 { margin:0; font-size:20px; letter-spacing:-.2px; }
+  .A .content { flex:1; overflow:hidden; padding:0 24px 14px; display:grid; grid-template-columns:minmax(0,1fr); gap:14px; align-content:start; }
+  .A .media { display:flex; gap:18px; padding:16px; }
+  .A .media .thumb { width:260px; }
+  .A .media h2 { margin:0 0 6px; font-size:17px; line-height:1.3; }
+  .A .stats { display:flex; gap:18px; margin-top:12px; }
+  .A .stats div { display:flex; flex-direction:column; }
+  .A .stats b { font-size:15px; } .A .stats span { font-size:11px; color:var(--dim); }
+  .A .groups { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px; }
+  .A .group .seg span { padding:6px 4px; }
+  .A .group { padding:16px; display:flex; flex-direction:column; gap:12px; }
+  .A .range { position:relative; height:34px; border-radius:8px; background:var(--s1); border:1px solid var(--line2); overflow:hidden; }
+  .A .range .sel { position:absolute; top:0; bottom:0; left:18%; right:34%; background:#9b5cff2a; border-left:3px solid var(--accent); border-right:3px solid var(--accent); }
+  .A .range svg { position:absolute; inset:0; width:100%; height:100%; }
+  .A .act { margin-top:auto; padding:14px 24px; border-top:1px solid var(--line); display:flex; align-items:center; gap:14px; background:var(--s1); }
+  .A .queue { width:340px; background:var(--s1); border-left:1px solid var(--line); display:flex; flex-direction:column; }
+  .A .qh { padding:16px 16px 10px; display:flex; align-items:center; gap:8px; }
+  .A .qh h3 { margin:0; font-size:14px; flex:1; }
+  .A .qtabs { margin:0 16px 10px; }
+  .A .jobs { padding:0 12px; display:flex; flex-direction:column; gap:8px; overflow:hidden; }
+  .A .job { padding:10px; border-radius:10px; background:var(--s2); border:1px solid var(--line); display:flex; gap:10px; }
+  .A .job .thumb { width:72px; border-radius:6px; }
+  .A .job .t { font-weight:600; font-size:12px; }
+  .A .job .s { font-size:11px; color:var(--dim); display:flex; gap:8px; margin-top:5px; }
+  .A .job .s b { color:var(--text); }
+
+  /* ============ B: One box ============ */
+  .B { flex:1; display:flex; flex-direction:column; min-height:0; background:radial-gradient(1200px 500px at 50% -200px,#2a1752 0%,transparent 60%), var(--bg); }
+  .B header { display:flex; align-items:center; padding:12px 22px; gap:14px; }
+  .B header .sp { flex:1; }
+  .B .hero { padding:10px 0 18px; display:flex; flex-direction:column; align-items:center; gap:12px; }
+  .B .omni { width:min(820px,90%); background:var(--s2); border:1px solid #9b5cff70; border-radius:16px; padding:6px 6px 6px 18px; display:flex; align-items:center; gap:12px; box-shadow:0 0 0 4px #9b5cff1a, 0 20px 50px #0008; }
+  .B .omni .val { flex:1; font-size:15px; }
+  .B .detect { display:flex; gap:8px; align-items:center; }
+  .B .modes { display:flex; gap:6px; }
+  .B .body { flex:1; min-height:0; display:grid; grid-template-columns:minmax(0,1.45fr) minmax(0,1fr); gap:18px; padding:0 22px 14px; }
+  .B .preview { padding:14px; display:flex; flex-direction:column; gap:12px; }
+  .B .preview .thumb { width:100%; border-radius:10px; }
+  .B .timeline { position:relative; height:56px; border-radius:8px; background:var(--s1); border:1px solid var(--line2); overflow:hidden; }
+  .B .timeline svg { position:absolute; inset:0; width:100%; height:100%; }
+  .B .timeline .sel { position:absolute; top:0; bottom:0; left:22%; right:40%; background:#9b5cff22; border-left:3px solid var(--accent); border-right:3px solid var(--accent); }
+  .B .timeline .tag { position:absolute; top:4px; font-size:10px; font-weight:700; background:var(--accent); padding:0 5px; border-radius:4px; }
+  .B .opts { padding:16px; display:flex; flex-direction:column; gap:15px; }
+  .B .opt { display:flex; flex-direction:column; gap:7px; }
+  .B .opts .line { display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:10px; background:var(--s1); border:1px solid var(--line); }
+  .B .stylepick { display:flex; gap:8px; }
+  .B .stylepick .sw { flex:1; height:48px; border-radius:8px; border:1px solid var(--line2); position:relative; background:linear-gradient(135deg,#232035,#141a2c); overflow:hidden; }
+  .B .stylepick .sw::after { content:""; position:absolute; top:6px; bottom:6px; width:30%; background:#000a; border-radius:4px; }
+  .B .stylepick .sw.r::after { right:6px; } .B .stylepick .sw.l::after { left:6px; } .B .stylepick .sw.o::after { left:8px; bottom:8px; top:auto; height:40%; width:36%; }
+  .B .stylepick .sw.on { border-color:var(--accent); box-shadow:0 0 0 2px #9b5cff55; }
+  .B .dock { border-top:1px solid var(--line); background:#0f0f14f2; padding:10px 22px 14px; }
+  .B .dock .dh { display:flex; align-items:center; gap:10px; margin-bottom:9px; }
+  .B .tray { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; }
+  .B .tj { display:flex; gap:10px; padding:9px; border-radius:10px; background:var(--s2); border:1px solid var(--line); }
+  .B .tj .thumb { width:64px; border-radius:6px; }
+
+  /* ============ C: Library ============ */
+  .C { flex:1; display:flex; flex-direction:column; min-height:0; }
+  .C header { display:flex; align-items:center; gap:16px; padding:10px 18px; border-bottom:1px solid var(--line); background:var(--s1); }
+  .C header .seg { width:auto; }
+  .C header .seg span { padding:6px 14px; }
+  .C .wrap { flex:1; display:grid; grid-template-columns:340px minmax(0,1fr) 300px; min-height:0; }
+  .C .compose { border-right:1px solid var(--line); padding:16px; display:flex; flex-direction:column; gap:14px; background:var(--s1); }
+  .C .compose .mini { display:flex; gap:10px; padding:10px; border-radius:10px; background:var(--s2); border:1px solid var(--line); }
+  .C .compose .mini .thumb { width:96px; border-radius:6px; }
+  .C .kv { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .C .field { display:flex; flex-direction:column; gap:5px; }
+  .C .sel { background:var(--s2); border:1px solid var(--line2); border-radius:8px; padding:7px 10px; display:flex; justify-content:space-between; color:var(--text); }
+  .C .sel::after { content:"▾"; color:var(--dim); }
+  .C .lib { padding:16px 18px; display:flex; flex-direction:column; gap:14px; overflow:hidden; }
+  .C .filters { display:flex; gap:6px; align-items:center; }
+  .C .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:14px; }
+  .C .item { border-radius:12px; background:var(--s2); border:1px solid var(--line); overflow:hidden; }
+  .C .item.picked { border-color:var(--accent); box-shadow:0 0 0 1px var(--accent); }
+  .C .item .thumb { border-radius:0; }
+  .C .item .ov { position:absolute; inset:0; background:#000a; display:flex; flex-direction:column; justify-content:flex-end; padding:8px; gap:5px; }
+  .C .item .meta { padding:9px 10px 10px; }
+  .C .item .t { font-weight:600; font-size:12px; }
+  .C .item .fmts { display:flex; gap:4px; margin-top:6px; }
+  .C .item .fmts span { font-size:9px; font-weight:800; padding:1px 5px; border-radius:4px; background:var(--s3); color:var(--dim); }
+  .C .insp { border-left:1px solid var(--line); background:var(--s1); padding:16px; display:flex; flex-direction:column; gap:14px; }
+  .C .files { display:flex; flex-direction:column; gap:6px; }
+  .C .file { display:flex; align-items:center; gap:10px; padding:8px 10px; border-radius:8px; background:var(--s2); border:1px solid var(--line); }
+  .C .file .ext { font-size:9px; font-weight:800; width:38px; text-align:center; padding:3px 0; border-radius:4px; background:var(--s3); }
+  .C .actions { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  .C .actions .btn { justify-content:center; }
+</style>
+</head>
+<body>
+<div class="picker">
+  <b>StreamGrab redesign</b>
+  <button data-m="a" class="on">A · Sidebar studio</button>
+  <button data-m="b">B · One box</button>
+  <button data-m="c">C · Library</button>
+  <span class="note">Static mockups with sample data. All three use the same refreshed dark theme: softer surfaces, rounded cards, chip toggles and segmented controls in place of rows of checkboxes.</span>
+</div>
+
+<div class="stage">
+
+<!-- ======================= A ======================= -->
+<div class="desc mock on" data-m="a" style="flex-direction:column">
+  <h3>A · Sidebar studio</h3>
+  <div>Closest to the app today, just reorganised. A left sidebar replaces the top tabs, the page fills the whole window instead of stopping at 1500 px, and the queue becomes a fixed right-hand column.</div>
+  <ul>
+    <li>The video gets a big preview with its stats. Options sit in three cards (Video, Chat, Bake-in), so the screen reads left to right instead of as one long form.</li>
+    <li>Trimming is a timeline with draggable handles, drawn over a chat-activity graph so you can see the busy moments. You can still type exact times.</li>
+    <li>The space below shows other videos from the same channel, one click to load them.</li>
+    <li>The Download button stays pinned at the bottom with a summary ("~6.1 GB · chat in 3 formats"), so you never have to scroll to it.</li>
+  </ul>
+</div>
+<div class="win mock on" data-m="a">
+  <div class="titlebar"><i></i><i></i><i></i><span>StreamGrab</span></div>
+  <div class="A">
+    <aside class="side">
+      <div class="logo"><div class="mark">▼</div>Stream<em>Grab</em></div>
+      <div class="nav on"><span class="i">⬇︎</span>Download</div>
+      <div class="nav"><span class="i">▦</span>Browse channel</div>
+      <div class="nav"><span class="i">●</span>Live <span class="badge">1</span></div>
+      <div class="nav"><span class="i">♫</span>Convert audio</div>
+      <div class="nav"><span class="i">✎</span>Chat style</div>
+      <div class="sep"></div>
+      <div class="nav"><span class="i">📁</span>Open folder</div>
+      <div class="nav"><span class="i">⚙︎</span>Settings</div>
+      <div class="disk">
+        <div class="tiny muted">Downloads folder</div>
+        <div class="b" style="margin:2px 0 8px">~/Downloads/StreamGrab</div>
+        <div class="bar"><div style="width:62%"></div></div>
+        <div class="tiny muted" style="margin-top:6px">412 GB free of 1 TB</div>
+      </div>
+    </aside>
+
+    <main>
+      <div class="top">
+        <h1>Download</h1>
+        <div class="row">
+          <div class="input grow"><span>🔗</span><span class="val">https://www.twitch.tv/videos/2291840571</span><span class="kbd">⌘V</span></div>
+          <button class="btn sec">Fetch info</button>
+        </div>
+      </div>
+      <div class="content">
+        <div class="card media">
+          <div class="thumb g1"><span class="ic">▶</span><span class="dur">6:42:18</span></div>
+          <div class="grow">
+            <div class="row" style="gap:6px; margin-bottom:6px"><span class="pill tw">Twitch</span><span class="pill">VOD</span><span class="pill ok">Chat available</span></div>
+            <h2>24 HOUR SPEEDRUN MARATHON — day 2, any% attempts all night</h2>
+            <div class="muted">pixelrunner · streamed Nov 17, 2026 · Just Chatting → Celeste</div>
+            <div class="stats">
+              <div><b>1080p60</b><span>best quality</span></div>
+              <div><b>48,210</b><span>chat messages</span></div>
+              <div><b>~6.1 GB</b><span>estimated size</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="groups">
+          <div class="card group">
+            <div class="lbl">Video</div>
+            <div class="seg"><span class="on">1080p60</span><span>720p60</span><span>480p</span><span>Audio</span></div>
+            <div class="col" style="gap:6px">
+              <div class="row"><span class="tiny muted grow">Section</span><span class="tiny b">1:12:30 → 4:25:00</span></div>
+              <div class="range">
+                <svg viewBox="0 0 100 34" preserveAspectRatio="none"><path d="M0 34 L0 28 L5 26 L9 29 L14 22 L18 25 L23 14 L27 20 L31 9 L35 18 L40 23 L44 12 L49 17 L53 6 L57 15 L61 21 L66 24 L70 13 L75 19 L80 25 L85 18 L90 27 L95 22 L100 26 L100 34Z" fill="#9b5cff33"/></svg>
+                <div class="sel"></div>
+              </div>
+              <div class="tiny muted">Drag the handles, or type exact times. The graph shows chat activity.</div>
+            </div>
+          </div>
+          <div class="card group">
+            <div class="lbl">Chat</div>
+            <div class="row"><span class="grow b">Download chat</span><span class="switch on"></span></div>
+            <div class="row" style="flex-wrap:wrap; gap:6px"><span class="chip on">JSON</span><span class="chip on">TXT</span><span class="chip on">HTML replay</span></div>
+            <div class="tiny muted">The HTML replay scrolls in sync with the video and has click-to-seek timestamps.</div>
+          </div>
+          <div class="card group">
+            <div class="lbl">Bake chat into video</div>
+            <div class="row"><span class="grow b">Render chat onto the MP4</span><span class="switch on"></span></div>
+            <div class="row">
+              <div class="thumb g7" style="width:96px; border-radius:6px"><div style="position:absolute; right:5px; top:5px; bottom:5px; width:30%; background:#000a; border-radius:3px"></div></div>
+              <div class="grow"><div class="b">Panel right</div><div class="tiny muted">Inter · 22 px · 70% background</div><div class="tiny" style="color:#c4a5ff; margin-top:3px">Edit style →</div></div>
+            </div>
+            <div class="row"><span class="grow tiny muted">Keep the original video too</span><span class="switch"></span></div>
+          </div>
+        </div>
+        <div class="card" style="padding:14px 16px">
+          <div class="row" style="margin-bottom:10px"><span class="lbl grow">More from pixelrunner</span><span class="tiny" style="color:#c4a5ff">Browse channel →</span></div>
+          <div style="display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:10px">
+            <div><div class="thumb g2"><span class="dur">5:10:02</span></div><div class="tiny b ell" style="margin-top:5px">Marathon day 1</div></div>
+            <div><div class="thumb g3"><span class="dur">3:44:51</span></div><div class="tiny b ell" style="margin-top:5px">Route planning + chill</div></div>
+            <div><div class="thumb g6"><span class="dur">2:18:40</span></div><div class="tiny b ell" style="margin-top:5px">Viewer races</div></div>
+            <div><div class="thumb g4"><span class="dur">0:01:02</span></div><div class="tiny b ell" style="margin-top:5px">Clip · world record pace</div></div>
+            <div><div class="thumb g7"><span class="dur">4:02:13</span></div><div class="tiny b ell" style="margin-top:5px">Practice session</div></div>
+          </div>
+        </div>
+      </div>
+      <div class="act">
+        <div class="grow"><div class="b">1:12:30 → 4:25:00 · 1080p60</div><div class="tiny muted">~3.0 GB · chat as JSON, TXT and HTML · chat baked in (panel right)</div></div>
+        <button class="btn sec">Add to queue later</button>
+        <button class="btn lg">⬇︎ Download</button>
+      </div>
+    </main>
+
+    <aside class="queue">
+      <div class="qh"><h3>Queue</h3><button class="btn ghost sm">Clear finished</button></div>
+      <div class="seg qtabs"><span class="on">Active · 3</span><span>Finished · 14</span></div>
+      <div class="jobs">
+        <div class="job"><div class="thumb g5"><span class="dur">LIVE</span></div><div class="grow">
+          <div class="t ell">● Recording pixelrunner</div><div class="bar rec" style="margin-top:6px"><div></div></div>
+          <div class="s"><b>2:14:07</b><span>3.2 GB</span><span>chat 9,812</span></div>
+          <div class="row" style="margin-top:7px; gap:6px"><button class="btn rec sm">■ Stop &amp; save</button></div></div></div>
+        <div class="job"><div class="thumb g2"><span class="dur">1:58:10</span></div><div class="grow">
+          <div class="t ell">Building a synth from scratch, part 3</div><div class="bar" style="margin-top:6px"><div style="width:64%"></div></div>
+          <div class="s"><b>64%</b><span>42 MB/s</span><span>ETA 1:12</span></div></div></div>
+        <div class="job"><div class="thumb g1"><span class="dur">3:12:30</span></div><div class="grow">
+          <div class="t ell">Baking chat · speedrun marathon day 1</div><div class="bar" style="margin-top:6px"><div style="width:27%"></div></div>
+          <div class="s"><b>27%</b><span>7.1× real time</span><span>ETA 19 min</span></div></div></div>
+        <div class="job"><div class="thumb g4"><span class="ic">♫</span></div><div class="grow">
+          <div class="t ell">🎵 12 files · FLAC → MP3 320</div><div class="bar" style="margin-top:6px"><div style="width:83%"></div></div>
+          <div class="s"><b>10 / 12</b><span>~/Music/Converted</span></div></div></div>
+        <div class="job" style="opacity:.75"><div class="thumb g3"><span class="dur">0:48</span></div><div class="grow">
+          <div class="t ell">Clip · that jump was impossible</div><div class="bar ok" style="margin-top:6px"><div style="width:100%"></div></div>
+          <div class="s"><b style="color:var(--ok)">Done</b><span>Show in Finder</span><span>Play</span></div></div></div>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<!-- ======================= B ======================= -->
+<div class="desc mock" data-m="b" style="flex-direction:column">
+  <h3>B · One box</h3>
+  <div>A single smart input replaces the tabs. Paste anything and StreamGrab works out what it is: a VOD or clip opens Download, a channel opens Browse, a live channel offers Record, and dropped audio files open Convert. The mode chips under the box let you switch by hand.</div>
+  <ul>
+    <li>A large 16:9 preview with a trim timeline under it. Chat activity is drawn on the timeline, so the busy moments are easy to find.</li>
+    <li>Options go in one column on the right, with bake-in styles shown as small layout thumbnails instead of a dropdown.</li>
+    <li>The queue is a dock along the bottom that expands when you click it, so the work area gets the full width.</li>
+  </ul>
+</div>
+<div class="win mock" data-m="b">
+  <div class="titlebar"><i></i><i></i><i></i><span>StreamGrab</span></div>
+  <div class="B">
+    <header>
+      <div class="logo"><div class="mark">▼</div>Stream<em>Grab</em></div>
+      <span class="sp"></span>
+      <button class="btn ghost sm">✎ Chat style</button>
+      <button class="btn ghost sm">📁 Folder</button>
+      <button class="btn ghost sm">⚙︎ Settings</button>
+    </header>
+    <div class="hero">
+      <div class="omni"><span style="font-size:16px">🔗</span><span class="val">twitch.tv/videos/2291840571</span><button class="btn">Go</button></div>
+      <div class="detect">
+        <span class="tiny muted">Detected</span><span class="pill tw">Twitch VOD</span>
+        <span class="tiny muted" style="margin-left:14px">Mode</span>
+        <div class="modes"><span class="chip on">Download</span><span class="chip">Browse channel</span><span class="chip">Record live</span><span class="chip">Convert audio</span></div>
+      </div>
+    </div>
+    <div class="body">
+      <div class="card preview">
+        <div class="thumb g1" style="aspect-ratio:16/7.4"><span class="ic" style="font-size:40px">▶</span><span class="dur">6:42:18</span>
+          <div style="position:absolute; left:14px; bottom:12px; right:90px">
+            <div style="font-size:18px; font-weight:800; text-shadow:0 2px 8px #000">24 HOUR SPEEDRUN MARATHON — day 2</div>
+            <div class="tiny" style="opacity:.85">pixelrunner · Nov 17, 2026 · 48,210 chat messages</div></div></div>
+        <div class="row"><span class="lbl grow">Section to download</span><span class="tiny muted">Start</span><div class="input" style="padding:5px 9px; width:92px">1:12:30</div><span class="tiny muted">End</span><div class="input" style="padding:5px 9px; width:92px">4:25:00</div><button class="btn ghost sm">Whole VOD</button></div>
+        <div class="timeline">
+          <svg viewBox="0 0 200 56" preserveAspectRatio="none"><path d="M0 56 L0 46 L6 44 L12 48 L18 38 L24 42 L30 30 L36 36 L42 20 L48 32 L54 40 L60 26 L66 30 L72 12 L78 26 L84 36 L90 40 L96 24 L102 32 L108 44 L114 34 L120 46 L126 38 L132 42 L138 18 L144 28 L150 40 L156 44 L162 36 L168 46 L174 40 L180 48 L186 42 L192 47 L200 44 L200 56Z" fill="#9b5cff40"/></svg>
+          <div class="sel"></div><span class="tag" style="left:22%">1:12:30</span><span class="tag" style="right:40%">4:25:00</span>
+        </div>
+      </div>
+      <div class="card opts">
+        <div class="opt"><span class="lbl">Quality</span><div class="seg"><span class="on">1080p60</span><span>720p60</span><span>480p</span><span>Audio only</span></div></div>
+        <div class="opt"><span class="lbl">Chat</span><div class="row" style="gap:6px"><span class="chip on">JSON</span><span class="chip on">TXT</span><span class="chip on">HTML replay</span></div></div>
+        <div class="opt"><span class="lbl">Bake chat into the video</span>
+          <div class="stylepick"><div class="sw" style="display:grid;place-items:center;color:var(--dim);font-weight:700">Off</div><div class="sw r on"></div><div class="sw l"></div><div class="sw o"></div></div>
+          <div class="row tiny muted"><span class="grow">Panel right · Inter 22 px</span><span style="color:#c4a5ff">Edit style →</span></div>
+        </div>
+        <div class="line"><span class="grow">Keep the original video too</span><span class="switch"></span></div>
+        <div style="margin-top:auto" class="row"><div class="grow"><div class="b">~3.0 GB</div><div class="tiny muted">saved to ~/Downloads/StreamGrab/pixelrunner</div></div><button class="btn lg">⬇︎ Download</button></div>
+      </div>
+    </div>
+    <div class="dock">
+      <div class="dh"><span class="b">Queue</span><span class="pill" style="background:var(--accent)">3 active</span><span class="tiny muted">14 finished</span><span class="grow"></span><span class="tiny muted">Overall 58% · 42 MB/s</span><button class="btn ghost sm">Expand ▴</button></div>
+      <div class="tray">
+        <div class="tj"><div class="thumb g5"><span class="dur">LIVE</span></div><div class="grow"><div class="tiny b ell">● Recording pixelrunner</div><div class="bar rec" style="margin:6px 0 4px"><div></div></div><div class="tiny muted">2:14:07 · 3.2 GB · <span style="color:var(--rec)">Stop &amp; save</span></div></div></div>
+        <div class="tj"><div class="thumb g2"></div><div class="grow"><div class="tiny b ell">Building a synth, part 3</div><div class="bar" style="margin:6px 0 4px"><div style="width:64%"></div></div><div class="tiny muted">64% · 42 MB/s · 1:12 left</div></div></div>
+        <div class="tj"><div class="thumb g1"></div><div class="grow"><div class="tiny b ell">Baking chat · marathon day 1</div><div class="bar" style="margin:6px 0 4px"><div style="width:27%"></div></div><div class="tiny muted">27% · 19 min left</div></div></div>
+        <div class="tj"><div class="thumb g4"><span class="ic" style="font-size:16px">♫</span></div><div class="grow"><div class="tiny b ell">12 files · FLAC → MP3</div><div class="bar" style="margin:6px 0 4px"><div style="width:83%"></div></div><div class="tiny muted">10 of 12 done</div></div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ======================= C ======================= -->
+<div class="desc mock" data-m="c" style="flex-direction:column">
+  <h3>C · Library</h3>
+  <div>Your downloads become the centre of the app. Adding something new happens in a compact column on the left, and the middle shows everything you've downloaded, recorded or converted as a thumbnail library. Items still in progress show their progress over the thumbnail.</div>
+  <ul>
+    <li>Filters (Videos, Live recordings, Clips, Audio) and search, so older downloads are easy to find. The library is built from the download folder, so it survives restarts, unlike today's queue.</li>
+    <li>Selecting an item opens an inspector with all its files (MP4, chat JSON/TXT, HTML replay) and the follow-up actions: re-render chat, extract audio, open the replay, show in Finder.</li>
+    <li>This is the biggest change. It needs a small index of finished downloads on the server side.</li>
+  </ul>
+</div>
+<div class="win mock" data-m="c">
+  <div class="titlebar"><i></i><i></i><i></i><span>StreamGrab</span></div>
+  <div class="C">
+    <header>
+      <div class="logo"><div class="mark">▼</div>Stream<em>Grab</em></div>
+      <div class="seg"><span class="on">Download</span><span>Browse</span><span>Live</span><span>Convert</span><span>Chat style</span></div>
+      <span class="grow"></span>
+      <div class="input" style="padding:6px 10px; width:240px"><span>⌕</span><span class="ph">Search library</span><span class="kbd">⌘F</span></div>
+      <button class="btn ghost sm">⚙︎</button>
+    </header>
+    <div class="wrap">
+      <aside class="compose">
+        <div class="lbl">New download</div>
+        <div class="input"><span class="val ell">twitch.tv/videos/2291840571</span></div>
+        <div class="mini"><div class="thumb g1"><span class="dur">6:42:18</span></div><div class="grow"><div class="b" style="font-size:12px">24 HOUR SPEEDRUN MARATHON — day 2</div><div class="tiny muted" style="margin-top:3px">pixelrunner · Nov 17</div><div class="row" style="gap:4px; margin-top:6px"><span class="pill tw">Twitch</span><span class="pill ok">Chat</span></div></div></div>
+        <div class="kv">
+          <div class="field"><span class="lbl">Quality</span><div class="sel">1080p60</div></div>
+          <div class="field"><span class="lbl">Section</span><div class="sel">1:12:30 – 4:25:00</div></div>
+        </div>
+        <div class="field"><span class="lbl">Chat files</span><div class="row" style="gap:6px"><span class="chip on">JSON</span><span class="chip on">TXT</span><span class="chip on">HTML</span></div></div>
+        <div class="field"><span class="lbl">Bake chat in</span><div class="row"><span class="switch on"></span><span class="grow">Panel right</span><span class="tiny" style="color:#c4a5ff">Edit →</span></div></div>
+        <div class="row"><span class="switch"></span><span class="muted">Keep the original video too</span></div>
+        <button class="btn lg" style="justify-content:center; margin-top:auto">⬇︎ Download · ~3.0 GB</button>
+      </aside>
+
+      <section class="lib">
+        <div class="filters">
+          <span class="chip on">All · 41</span><span class="chip">Videos</span><span class="chip">Live recordings</span><span class="chip">Clips</span><span class="chip">Audio</span>
+          <span class="grow"></span><span class="tiny muted">Sort</span><div class="seg"><span class="on">Newest</span><span>Size</span><span>Channel</span></div>
+        </div>
+        <div class="grid">
+          <div class="item"><div class="thumb g5"><div class="ov"><div class="row tiny"><span class="pill live">● Rec</span><span class="grow"></span><b>2:14:07</b></div><div class="bar rec"><div></div></div></div></div>
+            <div class="meta"><div class="t ell">pixelrunner · live now</div><div class="tiny muted">3.2 GB · chat 9,812</div></div></div>
+          <div class="item"><div class="thumb g2"><div class="ov"><div class="row tiny"><b>64%</b><span class="grow"></span><span>1:12 left</span></div><div class="bar"><div style="width:64%"></div></div></div></div>
+            <div class="meta"><div class="t ell">Building a synth from scratch, part 3</div><div class="tiny muted">YouTube · 42 MB/s</div></div></div>
+          <div class="item picked"><div class="thumb g1"><span class="dur">3:12:30</span></div>
+            <div class="meta"><div class="t ell">Speedrun marathon day 1 (chat)</div><div class="tiny muted">pixelrunner · 4.1 GB</div><div class="fmts"><span>MP4</span><span>CHAT</span><span>JSON</span><span>HTML</span></div></div></div>
+          <div class="item"><div class="thumb g3"><span class="dur">0:48</span></div>
+            <div class="meta"><div class="t ell">Clip · that jump was impossible</div><div class="tiny muted">pixelrunner · 38 MB</div><div class="fmts"><span>MP4</span></div></div></div>
+          <div class="item"><div class="thumb g4"><span class="ic">♫</span><span class="dur">12 files</span></div>
+            <div class="meta"><div class="t ell">Album rips · FLAC → MP3 320</div><div class="tiny muted">~/Music/Converted · 164 MB</div><div class="fmts"><span>MP3</span></div></div></div>
+          <div class="item"><div class="thumb g6"><span class="dur">2:05:44</span></div>
+            <div class="meta"><div class="t ell">Cozy art stream: painting a forest</div><div class="tiny muted">mossbrush · 2.7 GB</div><div class="fmts"><span>MP4</span><span>JSON</span><span>TXT</span><span>HTML</span></div></div></div>
+          <div class="item"><div class="thumb g7"><span class="dur">1:31:02</span></div>
+            <div class="meta"><div class="t ell">Q&amp;A night, everything about modding</div><div class="tiny muted">mossbrush · 1.9 GB</div><div class="fmts"><span>MP4</span><span>JSON</span></div></div></div>
+          <div class="item"><div class="thumb g2"><span class="dur">0:22:10</span></div>
+            <div class="meta"><div class="t ell">Patch notes breakdown</div><div class="tiny muted">YouTube · 610 MB</div><div class="fmts"><span>MP4</span></div></div></div>
+        </div>
+      </section>
+
+      <aside class="insp">
+        <div class="thumb g1"><span class="ic" style="font-size:30px">▶</span><span class="dur">3:12:30</span></div>
+        <div><div class="b" style="font-size:14px">Speedrun marathon day 1</div><div class="tiny muted" style="margin-top:2px">pixelrunner · Twitch VOD · downloaded Nov 18</div></div>
+        <div class="lbl">Files</div>
+        <div class="files">
+          <div class="file"><span class="ext" style="background:#9b5cff33; color:#d8c3ff">MP4</span><span class="grow ell">…day 1 (chat).mp4</span><span class="tiny muted">4.1 GB</span></div>
+          <div class="file"><span class="ext">MP4</span><span class="grow ell">…day 1.mp4</span><span class="tiny muted">3.6 GB</span></div>
+          <div class="file"><span class="ext">HTML</span><span class="grow ell">chat replay</span><span class="tiny muted">2 MB</span></div>
+          <div class="file"><span class="ext">JSON</span><span class="grow ell">chat.json</span><span class="tiny muted">14 MB</span></div>
+          <div class="file"><span class="ext">TXT</span><span class="grow ell">chat.txt</span><span class="tiny muted">3 MB</span></div>
+        </div>
+        <div class="lbl">Actions</div>
+        <div class="actions">
+          <button class="btn sec sm">▶ Play</button><button class="btn sec sm">💬 Open replay</button>
+          <button class="btn sec sm">✎ Re-render chat</button><button class="btn sec sm">♫ Extract audio</button>
+          <button class="btn sec sm" style="grid-column:1/-1">📁 Show in Finder</button>
+        </div>
+      </aside>
+    </div>
+  </div>
+</div>
+
+</div>
+<script>
+  const fit = () => document.querySelectorAll('.win').forEach(w => w.style.zoom = Math.min(1, (innerWidth - 40) / 1320));
+  addEventListener('resize', fit); fit();
+  document.querySelectorAll('.picker button').forEach(b => b.onclick = () => {
+    document.querySelectorAll('.picker button').forEach(x => x.classList.toggle('on', x === b));
+    document.querySelectorAll('.mock').forEach(m => m.classList.toggle('on', m.dataset.m === b.dataset.m));
+  });
+</script>
+</body>
+</html>
