@@ -17,6 +17,8 @@ ap.add_argument("--app", required=True)
 ap.add_argument("--bin", required=True)
 ap.add_argument("--port", type=int, default=8799)
 args = ap.parse_args()
+# absolute paths: the engine runs with its app folder as the working directory
+args.python, args.app, args.bin = (os.path.abspath(x) for x in (args.python, args.app, args.bin))
 
 BASE = f"http://127.0.0.1:{args.port}"
 TWITCH_VOD = None  # picked at run time: Twitch deletes old VODs, so a fixed link would stop working
