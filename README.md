@@ -1,40 +1,35 @@
 # StreamGrab
 
-A local Twitch + YouTube VOD and chat downloader, in the spirit of TwitchDownloader, TwitchLink and TwitchLeecher.
+Download Twitch and YouTube videos, chat and live streams, and bake the chat right into the video. For Mac and Windows.
+
+**[⬇ Download the latest version](https://github.com/kuriswh0/StreamGrab/releases/latest)**: `.dmg` for Mac (Apple Silicon), Setup `.exe` or portable `.zip` for Windows. Everything it needs is included.
+
+<img src="docs/baked-chat.webp" width="800" alt="Chat baked into a video, rendered by StreamGrab">
 
 ## Features
 
-- **Video downloads** for Twitch VODs, highlights, uploads and clips, plus YouTube videos and past livestreams. Pick a quality (1080p60, 720p, …).
-- **YouTube to MP3** page: paste one or more links (YouTube or Twitch) and save just the audio as MP3 (320 or 192 kbps), WAV, FLAC, Opus or the original M4A. MP3 and M4A get the title, channel and thumbnail as tags and cover art.
-- **Trimming**: download only part of a long VOD. Drag across the timeline or type `h:mm:ss` times. For Twitch VODs the timeline shows a graph of chat activity, so the busy moments are easy to find.
-- **Chat downloads**:
-  - Twitch VOD chat, fetched in parallel (about 3,600 messages from a 3.4 h VOD in ~12 s)
-  - YouTube live-chat replays
-  - Saved as **JSON** (with emote URLs, badges and colors), **TXT** (`[h:mm:ss] user: message`) and an **HTML replay**: open it next to the video and chat scrolls in sync with playback, with emotes, badges, a filter and click-to-seek timestamps.
-- **Live recording**: record a Twitch or YouTube channel while it's live.
-  - Twitch recordings also save the live chat, kept in sync with the video.
-  - It can wait for an offline channel to go live, then start recording.
-  - YouTube streams can be recorded from the beginning.
-  - Press **Stop & save** to end a recording. Quitting the app also stops and saves recordings in progress.
-- **Chat baked into the video**: render chat onto the video and save it as one MP4. This works for VODs, for live recordings, and as **Re-render chat** on anything already downloaded. You choose the look in the **Chat style** editor, where a preview updates as you change:
-  - layout: a panel on the left or right, or an overlay anywhere on the video
-  - panel size, font, font size, text and background colors, background opacity and corner radius
-  - badges, emotes, BTTV/FFZ/7TV emotes, timestamps and text shadow
-  - **Animated emotes** (Twitch's own) and **Animated GIFs** (BTTV/FFZ/7TV) are separate switches. The preview plays about 2 seconds of the animation when one is visible.
-- **Channel browser**: list a Twitch channel's past broadcasts, highlights or uploads, or a YouTube channel's streams, videos or shorts. Select one or more and press **Open in Download**: they're placed on the Download page (one fetched and ready to trim, or several as a batch) so you can set the options before anything downloads.
-- **Audio converter** (Convert audio tab): convert between MP3, AAC (.m4a), OGG Vorbis, Opus, WMA, FLAC,
-  ALAC, WAV and AIFF, in any direction and in batches. Drop files in or choose them; video files work too
-  (the audio is extracted).
-  - Choose the bitrate for lossy formats, or the bit depth for lossless ones ("match the original" keeps
-    24-bit masters at 24-bit). You can also change the sample rate or convert to mono/stereo.
-  - Tags and cover art are kept wherever the format supports them.
-  - Output goes next to the original or to `StreamGrab/Converted`. Existing files are never overwritten.
-  - Engine: `convert.py` (ffmpeg). Builds without libvorbis fall back to ffmpeg's built-in Vorbis encoder.
-- **Queue** in a column on the right, split into Active and Finished, with progress, speed/ETA, cancel, retry, and "show in folder".
-- **Layout**: a sidebar for the pages and a pinned action bar that sums up what you're about to download. On the Download page the section timeline is the main box, with video and chat options in one slim row below it and the bake-in styles at the bottom.
-- Batch mode: paste several URLs, one per line.
+**Download any part of a VOD.** Twitch VODs, highlights and clips, YouTube videos and past streams, at any quality. Drag across the timeline to grab just a section: the chat-activity graph shows where the action is.
 
-## Requirements
+<img src="docs/download.gif" width="800" alt="Fetching a Twitch VOD, selecting the busiest section on the chat graph and downloading it">
+
+**Bake chat into the video**, or save it as JSON, TXT and an HTML replay that scrolls in sync with the video. Design the look in the style editor: side panel or overlay, fonts, colors, badges, BTTV/FFZ/7TV and animated emotes.
+
+<img src="docs/chat-style.gif" width="800" alt="Changing the chat layout, font size and background in the chat style editor">
+
+**YouTube to MP3.** Save just the audio as MP3, WAV, FLAC, M4A or Opus, with title, artist and cover art.
+
+<img src="docs/youtube-to-mp3.gif" width="800" alt="Adding two YouTube links and downloading them as MP3">
+
+**Also:**
+- **Live recording** of Twitch and YouTube channels, with Twitch chat. It can wait for an offline channel to go live.
+- **Channel browser:** list a channel's broadcasts, highlights or uploads and send them to the Download page.
+- **Audio converter:** MP3, AAC, OGG, Opus, WMA, FLAC, ALAC, WAV and AIFF, in batches, keeping tags and cover art.
+- **Queue** with progress, cancel, retry and re-render chat. Batch downloads: paste several links.
+- **Update notice** in the app when a new version is out.
+
+<sub>Demo footage: NASA's SpaceX Crew-13 launch (NASA). Chat in the demos is sample chat.</sub>
+
+## Run from source
 
 - Python 3.9+ (standard library only, nothing to `pip install`)
 - `yt-dlp` and `ffmpeg` on your PATH:
