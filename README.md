@@ -12,7 +12,7 @@ Download Twitch and YouTube videos, chat and live streams, and bake the chat rig
 
 <img src="docs/download.gif" width="800" alt="Fetching a Twitch VOD, selecting the busiest section on the chat graph and downloading it">
 
-**Bake chat into the video**, or save it as JSON, TXT and an HTML replay that scrolls in sync with the video. Design the look in the style editor: side panel or overlay, fonts, colors, badges, BTTV/FFZ/7TV and animated emotes.
+**Bake chat into the video**, or save it as JSON, TXT and an HTML replay that scrolls in sync with the video. Design the look in the style editor: side panel or overlay, fonts, colors, badges, BTTV/FFZ/7TV and animated emotes. Choose per download whether it encodes on the **GPU** (the CPU stays free), **CPU · balanced** or **CPU · max**.
 
 <img src="docs/chat-style.gif" width="800" alt="Changing the chat layout, font size and background in the chat style editor">
 
@@ -150,9 +150,11 @@ The server only listens on 127.0.0.1 and rejects requests from other origins.
 - **YouTube live chat** isn't recorded during live streams. YouTube VOD chat replays still download.
 - **Twitch ads**: during ad breaks, a live recording captures Twitch's ad placeholder screen.
 - **Recordings start with buffered footage**: each recording begins with roughly 10–20 seconds of video that Twitch had already buffered. That footage has no chat.
-- **Baking chat in needs a re-encode**: about 7× real time for 1080p60 on an M4 Pro (a 2h42m section takes about 22 minutes). Settings → "Baking chat into video" lets you choose:
-  - **Fast** (default): uses all CPU cores.
-  - **Hardware encoder**: about half as fast, but leaves the CPU free for other work. Apple Silicon has a single encode engine, so running encodes in parallel doesn't speed it up.
+- **Baking chat in needs a re-encode.** "Encode with" on the bake-in card (default in Settings):
+  - **GPU** (default): the graphics chip's video encoder (Apple media engine, NVIDIA, Intel or AMD). The CPU stays almost idle. Without one it uses CPU · balanced.
+  - **CPU · balanced**: x264 on half the cores. **CPU · max**: every core, fastest, but the computer is busy.
+  - Encoding always runs at low priority, so the computer stays responsive.
+- **YouTube downloads** fetch each video in chunks, several at once (about 11× faster than one connection). Sections of videos up to an hour are downloaded whole and cut locally, which is quicker than streaming the section.
 - **Trimmed Twitch downloads** fetch only the segments they need, 12 at a time, at up to your line speed. While downloading, they briefly use extra disk space equal to the section's size.
 - **Chat renderer requires macOS**: it's written in Swift. When you run `server.py` directly, it's compiled automatically the first time it's needed.
 - **No percentage for trimmed YouTube downloads**: yt-dlp downloads these through ffmpeg, which doesn't report progress, so only size and speed are shown.

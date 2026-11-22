@@ -65,40 +65,50 @@ def cache_dir(*parts):
     return os.path.join(base, *parts)
 
 
+# Windows only lets the foreground app bring windows to the front, and that's the StreamGrab window
+# (Edge), not this background process: without help the dialog opens behind it, invisible. So it gets a
+# visible always-on-top owner and takes the focus (the Alt key press is the standard way to be allowed).
+_FRONT = (
+    "Add-Type -AssemblyName System.Windows.Forms;"
+    "Add-Type -Namespace SG -Name W -MemberDefinition '"
+    "[DllImport(\"user32.dll\")] public static extern bool SetForegroundWindow(System.IntPtr h);"
+    "[DllImport(\"user32.dll\")] public static extern void keybd_event(byte k, byte s, uint f, System.UIntPtr e);';"
+    "[Console]::OutputEncoding=[Text.Encoding]::UTF8;"
+    "$o=New-Object System.Windows.Forms.Form -Property @{TopMost=$true;ShowInTaskbar=$false;Opacity=0;"
+    "FormBorderStyle='None';StartPosition='CenterScreen';Width=1;Height=1};"
+)
+_SHOW = (
+    "$o.Add_Shown({[SG.W]::keybd_event(0x12,0,0,[UIntPtr]::Zero);[SG.W]::keybd_event(0x12,0,2,[UIntPtr]::Zero);"
+    "[void][SG.W]::SetForegroundWindow($o.Handle);$o.Activate();"
+    "if($d.ShowDialog($o) -eq 'OK'){[Console]::Out.Write(RESULT)};$o.Close()});"
+    "[void]$o.ShowDialog()"
+)
+
+
+def _dialog(setup, result, env=None):
+    script = _FRONT + setup + _SHOW.replace("RESULT", result)
+    p = subprocess.run(["powershell", "-NoProfile", "-STA", "-ExecutionPolicy", "Bypass", "-Command", script],
+                       capture_output=True, text=True, env=env, timeout=600)
+    return p.stdout or ""
+
+
 def pick_folder(current=""):
     """Native folder dialog on Windows (the macOS app has its own). Returns a path or ''."""
     if not WINDOWS:
         return ""
-    script = (
-        "Add-Type -AssemblyName System.Windows.Forms;"
-        "[Console]::OutputEncoding=[Text.Encoding]::UTF8;"
-        "$d=New-Object System.Windows.Forms.FolderBrowserDialog;"
-        "$d.Description='Choose where StreamGrab saves downloads';$d.ShowNewFolderButton=$true;"
-        "$d.UseDescriptionForTitle=$true;"
-        "if($env:SG_CURRENT -and (Test-Path $env:SG_CURRENT)){$d.SelectedPath=$env:SG_CURRENT};"
-        "$o=New-Object System.Windows.Forms.Form -Property @{TopMost=$true;ShowInTaskbar=$false};"
-        "if($d.ShowDialog($o) -eq 'OK'){$d.SelectedPath}"
-    )
+    setup = ("$d=New-Object System.Windows.Forms.FolderBrowserDialog;"
+             "$d.Description='Choose where StreamGrab saves downloads';$d.ShowNewFolderButton=$true;"
+             "if($env:SG_CURRENT -and (Test-Path $env:SG_CURRENT)){$d.SelectedPath=$env:SG_CURRENT};")
     env = {**os.environ, "SG_CURRENT": os.path.expanduser(current or "")}
-    p = subprocess.run(["powershell", "-NoProfile", "-STA", "-ExecutionPolicy", "Bypass", "-Command", script],
-                       capture_output=True, text=True, env=env, timeout=600)
-    return (p.stdout or "").strip()
+    return _dialog(setup, "$d.SelectedPath", env).strip()
 
 
 def pick_files():
     """Native multi-file dialog on Windows (the macOS app has its own). Returns a list of paths."""
     if not WINDOWS:
         return []
-    script = (
-        "Add-Type -AssemblyName System.Windows.Forms;"
-        "[Console]::OutputEncoding=[Text.Encoding]::UTF8;"
-        "$d=New-Object System.Windows.Forms.OpenFileDialog;$d.Multiselect=$true;"
-        "$d.Title='Choose audio files to convert';"
-        "$d.Filter='Audio and video|*.mp3;*.flac;*.wav;*.aif;*.aiff;*.ogg;*.opus;*.m4a;*.aac;*.wma;*.alac;*.ape;"
-        "*.wv;*.mka;*.ac3;*.mp4;*.mkv;*.mov;*.webm|All files|*.*';"
-        "$o=New-Object System.Windows.Forms.Form -Property @{TopMost=$true;ShowInTaskbar=$false};"
-        "if($d.ShowDialog($o) -eq 'OK'){$d.FileNames -join \"`n\"}"
-    )
-    p = subprocess.run(["powershell", "-NoProfile", "-STA", "-ExecutionPolicy", "Bypass", "-Command", script],
-                       capture_output=True, text=True, timeout=600)
-    return [l.strip() for l in (p.stdout or "").splitlines() if l.strip()]
+    setup = ("$d=New-Object System.Windows.Forms.OpenFileDialog;$d.Multiselect=$true;"
+             "$d.Title='Choose audio files to convert';"
+             "$d.Filter='Audio and video|*.mp3;*.flac;*.wav;*.aif;*.aiff;*.ogg;*.opus;*.m4a;*.aac;*.wma;*.alac;*.ape;"
+             "*.wv;*.mka;*.ac3;*.mp4;*.mkv;*.mov;*.webm|All files|*.*';")
+    return [l.strip() for l in _dialog(setup, "($d.FileNames -join \"`n\")").splitlines() if l.strip()]

@@ -77,6 +77,53 @@ def open_window(url):
     return subprocess.Popen(args, creationflags=0x08000000)
 
 
+def keep_window_icon(stop):
+    """Edge gives app windows a small favicon scaled up, which looks blurry on high-DPI screens. Give the
+    StreamGrab window our own icon at the right size for its DPI (taskbar and title bar), and keep
+    re-applying it, since Edge can reset it."""
+    try:
+        import ctypes
+        import ctypes.wintypes as W
+        u = ctypes.windll.user32
+        u.LoadImageW.restype = W.HANDLE
+        u.SendMessageW.argtypes = [W.HWND, W.UINT, W.WPARAM, W.LPARAM]
+        u.GetDpiForWindow.restype = W.UINT
+        ico = os.path.join(APP, "static", "favicon.ico")
+        cache = {}
+
+        def handle(px):
+            if px not in cache:
+                cache[px] = u.LoadImageW(None, ico, 1, px, px, 0x10)  # IMAGE_ICON, LR_LOADFROMFILE
+            return cache[px]
+
+        def ours():
+            found = []
+
+            @ctypes.WINFUNCTYPE(W.BOOL, W.HWND, W.LPARAM)
+            def cb(h, _):
+                n = u.GetWindowTextLengthW(h)
+                b = ctypes.create_unicode_buffer(n + 1)
+                u.GetWindowTextW(h, b, n + 1)
+                c = ctypes.create_unicode_buffer(64)
+                u.GetClassNameW(h, c, 64)
+                if b.value == "StreamGrab" and c.value == "Chrome_WidgetWin_1" and u.IsWindowVisible(h):
+                    found.append(h)
+                return True
+            u.EnumWindows(cb, 0)
+            return found
+
+        while not stop.is_set():
+            for h in ours():
+                scale = (u.GetDpiForWindow(h) or 96) / 96
+                big, small = handle(round(32 * scale)), handle(round(16 * scale))
+                if big and u.SendMessageW(h, 0x007F, 1, 0) != big:  # WM_GETICON, ICON_BIG
+                    u.SendMessageW(h, 0x0080, 1, big)    # WM_SETICON, ICON_BIG
+                    u.SendMessageW(h, 0x0080, 0, small)  # WM_SETICON, ICON_SMALL
+            stop.wait(3)
+    except Exception as e:  # noqa: BLE001 - cosmetic only
+        log("window icon:", e)
+
+
 def existing_instance():
     try:
         with open(INSTANCE, encoding="utf-8") as fh:
@@ -106,6 +153,8 @@ def main():
     log("started", url)
 
     window = open_window(url)
+    icon_stop = threading.Event()
+    threading.Thread(target=keep_window_icon, args=(icon_stop,), daemon=True).start()
     started = time.time()
     # Quit when the window closes. Edge can hand the window to a helper process, so also treat
     # a minute without any request from the UI (it polls every second) as "closed".

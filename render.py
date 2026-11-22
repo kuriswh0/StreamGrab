@@ -394,7 +394,36 @@ def probe(path):
             "bitrate": int(fmt.get("bit_rate") or 0)}
 
 
-ENCODERS = ("fast", "hardware")
+# Bake-in encoding, chosen per download:
+#   gpu       the graphics chip's video encoder: the CPU stays almost idle (falls back to balanced)
+#   balanced  x264 on half the CPU cores
+#   max       x264 on every core: fastest, but the computer is busy while it runs
+ENCODERS = ("gpu", "balanced", "max")
+_LEGACY = {"hardware": "gpu", "fast": "max"}
+
+
+def encoder_mode(mode):
+    mode = _LEGACY.get(mode, mode)
+    return mode if mode in ENCODERS else "gpu"
+
+
+def gpu_name():
+    """Friendly name of the GPU encoder this machine has, or None (runs a quick test once)."""
+    hw = hardware_encoder()
+    return {"h264_videotoolbox": "Apple media engine", "h264_nvenc": "NVIDIA", "h264_qsv": "Intel Quick Sync",
+            "h264_amf": "AMD"}.get(hw) if hw else None
+
+
+def _threads(mode):
+    """Thread count for balanced (half the cores); None = let ffmpeg use them all."""
+    return max(2, (os.cpu_count() or 4) // 2) if mode == "balanced" else None
+
+
+def _low_priority():
+    """Popen arguments that run a process below normal priority, so the computer stays responsive."""
+    if os.name == "nt":
+        return {"creationflags": 0x00004000}  # BELOW_NORMAL_PRIORITY_CLASS
+    return {"preexec_fn": lambda: os.nice(10)}
 
 
 _HW = []
@@ -418,23 +447,32 @@ def hardware_encoder():
     return _HW[0]
 
 
-def _encoder_args(out_w, out_h, src, mode="fast"):
-    """fast: x264 on all CPU cores (~2x faster on Apple Silicon).
-    hardware: the GPU's video encoder (VideoToolbox / NVENC / Quick Sync / AMF); leaves the CPU free."""
-    hw = hardware_encoder() if mode == "hardware" else None
+def _encoder_args(out_w, out_h, src, mode="gpu"):
+    """See ENCODERS. gpu uses VideoToolbox / NVENC / Quick Sync / AMF, whichever works."""
+    hw = hardware_encoder() if mode == "gpu" else None
     if hw:
         # Bitrate scaled from the source to the (possibly wider) output, with headroom for re-encoding.
         area = (out_w * out_h) / max(1, src["w"] * src["h"])
         base = src["bitrate"] or out_h * 7000
         rate = int(min(max(base * area * 1.3, 2_500_000), 25_000_000))
         args = ["-c:v", hw, "-b:v", str(rate), "-maxrate", str(int(rate * 1.5)), "-bufsize", str(rate * 2)]
+        if hw in ("h264_videotoolbox", "h264_nvenc", "h264_qsv"):
+            # Don't copy closed-caption data from the source: Twitch streams carry SEI units these encoders
+            # can't parse, and the encode fails with "Invalid data found when processing input".
+            args += ["-a53cc", "0"]
         return args + (["-allow_sw", "1"] if hw == "h264_videotoolbox" else [])
-    return ["-c:v", "libx264", "-preset", "superfast", "-crf", "21"]
+    n = _threads(mode)
+    return ["-c:v", "libx264", "-preset", "superfast", "-crf", "21"] + (["-threads", str(n)] if n else [])
 
 
 def burn(video, messages, out_path, style, offset=0, login=None, platform="twitch",
-         progress=None, cancel=None, on_procs=None, encoder="fast"):
+         progress=None, cancel=None, on_procs=None, encoder="gpu"):
     """Renders chat onto `video`, writing `out_path`. Returns out_path."""
+    encoder = encoder_mode(encoder)
+    if encoder == "gpu" and not hardware_encoder():
+        encoder = "balanced"  # no GPU encoder on this machine: go easy on the CPU instead
+    n = _threads(encoder)
+    limit = ["-threads", str(n), "-filter_complex_threads", str(n)] if n else []
     src = probe(video)
     s = clean_style(style)
     g = geometry(s, src["w"], src["h"])
@@ -458,15 +496,16 @@ def burn(video, messages, out_path, style, offset=0, login=None, platform="twitc
         else:
             graph = (f"{chat_in}[0:v]format=yuv420p,pad={g['out_w']}:{g['out_h']}:{g['video_x']}:0:color=black[b];"
                      f"[b][c]{ov}[v]")
-        fcmd = ["ffmpeg", "-y", "-hide_banner", "-nostats", "-i", video,
+        fcmd = ["ffmpeg", "-y", "-hide_banner", "-nostats", *limit, "-i", video,
                 "-f", "rawvideo", "-pix_fmt", "bgra", "-video_size", f"{g['panel_w']}x{g['panel_h']}",
                 "-framerate", str(fps), "-i", "pipe:0",
                 "-filter_complex", graph, "-map", "[v]", "-map", "0:a?", "-c:a", "copy",
                 *_encoder_args(g["out_w"], g["out_h"], src, encoder),
                 "-movflags", "+faststart", "-progress", "pipe:1", out_path]
         errlog = open(os.path.join(tmp, "ffmpeg.log"), "w+")
-        rproc = subprocess.Popen(rcmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
-        fproc = subprocess.Popen(fcmd, stdin=rproc.stdout, stdout=subprocess.PIPE, stderr=errlog, text=True)
+        rproc = subprocess.Popen(rcmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, **_low_priority())
+        fproc = subprocess.Popen(fcmd, stdin=rproc.stdout, stdout=subprocess.PIPE, stderr=errlog, text=True,
+                                 **_low_priority())
         rproc.stdout.close()
         if on_procs:
             on_procs([rproc, fproc])

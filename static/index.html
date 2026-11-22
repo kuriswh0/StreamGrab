@@ -3,7 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="icon" type="image/png" href="/icon.png">
+<!-- 16-256 px in one file, so Windows picks a sharp size for the title bar and taskbar -->
+<link rel="icon" href="/favicon.ico" sizes="16x16 24x24 32x32 48x48 64x64 128x128 256x256">
+<link rel="icon" type="image/png" sizes="256x256" href="/icon.png">
 <title>StreamGrab</title>
 <style>
   :root {
@@ -36,6 +38,8 @@
   .disk { margin-top:auto; padding:12px; border-radius:10px; background:var(--s2); border:1px solid var(--line); cursor:pointer; }
   .upd { display:block; margin-top:auto; margin-bottom:8px; padding:10px 12px; border-radius:10px; background:#9b5cff1f; border:1px solid #9b5cff66; color:#dcc8ff; text-decoration:none; font-size:12px; }
   .upd b { display:block; color:#fff; font-size:13px; } .upd:hover { border-color:var(--accent); }
+  .encrow { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .encpick { width:auto; flex:1; max-width:380px; }
   .upd.busy { cursor:progress; border-color:var(--accent); }
   .upd:not(.hidden) + .disk { margin-top:0; }
   .disk .p { font-weight:700; margin:2px 0 8px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
@@ -353,6 +357,8 @@
         <div class="row"><label class="tog grow"><span><b>Bake chat into the video</b><small>Render chat onto the MP4 in the style you pick</small></span><input type="checkbox" class="sw" id="optBurn"></label></div>
         <div class="stylepick" id="optPick"></div>
         <select class="preset-pick hidden" id="optPreset"></select>
+        <div class="encrow"><span class="hint">Encode with</span><div class="seg encpick"><button data-e="gpu">GPU</button><button data-e="balanced">CPU · balanced</button><button data-e="max">CPU · max</button></div></div>
+          <div class="hint enchint"></div>
         <div class="row"><label class="tog grow"><span class="hint" style="color:var(--text)">Keep the original video too</span><input type="checkbox" class="sw" id="optKeep"></label><a href="#" class="gostyle link">Edit chat style →</a></div>
       </div>
     </div>
@@ -446,6 +452,8 @@
           <label class="tog"><span>Render chat on when the recording ends</span><input type="checkbox" class="sw" id="lBurn"></label>
           <div class="stylepick" id="lPick"></div>
           <select class="preset-pick hidden" id="lPreset"></select>
+          <div class="encrow"><span class="hint">Encode with</span><div class="seg encpick"><button data-e="gpu">GPU</button><button data-e="balanced">CPU · balanced</button><button data-e="max">CPU · max</button></div></div>
+          <div class="hint enchint"></div>
           <label class="tog"><span class="hint" style="color:var(--text)">Keep the original video too</span><input type="checkbox" class="sw" id="lKeep" checked></label>
         </div>
       </div>
@@ -619,8 +627,9 @@
   </div>
   <label class="field"><span>Baking chat into video</span>
     <select id="sEnc">
-      <option value="fast">Fast: uses all CPU cores (about 2× quicker, smaller files)</option>
-      <option value="hardware">Hardware encoder: slower, leaves the CPU free</option>
+      <option value="gpu">GPU: leaves the CPU free (default)</option>
+      <option value="balanced">CPU · balanced: half the CPU cores</option>
+      <option value="max">CPU · max: every core, fastest, the computer is busy</option>
     </select>
   </label>
   <label class="field"><span>Parallel connections for trimmed Twitch downloads</span><input type="text" id="sConn"></label>
@@ -727,6 +736,7 @@ async function fetchInfo() {
 $('#fetchBtn').onclick = fetchInfo;
 
 let dlDir = '';  // folder shown on the Download, YouTube to MP3 and Live pages (see showDlDir)
+let encMode = 'gpu', gpuName = null, gpuChecked = false;  // bake-in encoder (see encRender)
 function collectOpts() {
   const q = $('#quality').value;
   const o = {
@@ -737,7 +747,7 @@ function collectOpts() {
     end: $('#end').value.trim(),
   };
   if (dlDir) o.output_dir = dlDir;
-  if ($('#optBurn').checked) { o.burn = true; o.keep_original = $('#optKeep').checked; const st = pickedStyle('#optPreset'); if (st) o.chat_style = st; }
+  if ($('#optBurn').checked) { o.burn = true; o.encoder = encMode; o.keep_original = $('#optKeep').checked; const st = pickedStyle('#optPreset'); if (st) o.chat_style = st; }
   else if (q) { const [h, f] = q.split('|'); o.height = +h; if (f) o.fps = +f; }
   return o;
 }
@@ -830,7 +840,7 @@ function dlSummary() {
   if (!o.video) bits.push('chat only');
   if (o.chat && o.chat_formats.length) bits.push('chat as ' + o.chat_formats.map(f => f === 'html' ? 'HTML replay' : f.toUpperCase()).join(', '));
   else if (!o.chat) bits.push('no chat');
-  if (o.burn) bits.push('chat baked in' + (o.keep_original ? ' (original kept)' : ''));
+  if (o.burn) bits.push('chat baked in on ' + ({gpu: 'the GPU', balanced: 'half the CPU', max: 'all CPU cores'}[o.encoder] || 'the GPU') + (o.keep_original ? ' (original kept)' : ''));
   $('#dlSub').textContent = bits.join(' · ');
 }
 ['#optVideo', '#optChat', '#optBurn', '#optKeep', '#quality'].forEach(id => $(id).addEventListener('change', () => { burnState(); dlSummary(); }));
@@ -1090,7 +1100,7 @@ $('#lRec').onclick = async () => {
     chat: tw && $('#lChat').checked, chat_formats: [...document.querySelectorAll('.cf:checked')].map(c => c.value),
     burn: tw && $('#lChat').checked && $('#lBurn').checked, keep_original: $('#lKeep').checked,
     from_start: !tw && $('#lFromStart').checked, chat_style: pickedStyle('#lPreset') || undefined,
-    output_dir: dlDir || undefined,
+    output_dir: dlDir || undefined, encoder: encMode,
   };
   if ($('#lQuality').value) opts.height = +$('#lQuality').value;
   try {
@@ -1579,7 +1589,7 @@ $('#settingsBtn').onclick = async () => {
   const s = await api('/api/settings');
   $('#sDir').value = s.output_dir; $('#sSub').checked = s.subfolder_per_channel;
   $('#sPar').value = s.max_parallel; $('#sFrag').value = s.fragments; $('#sChat').value = s.chat_workers;
-  $('#sEnc').value = s.bake_encoder || 'fast'; $('#sConn').value = s.download_connections || 12;
+  $('#sEnc').value = s.bake_encoder || 'gpu'; $('#sConn').value = s.download_connections || 12;
   $('#settings').showModal();
 };
 // Native folder picker: the macOS app's own dialog, or the system dialog via the engine on Windows.
@@ -1605,17 +1615,35 @@ $('#sPick').onclick = async () => {
   $('#sPick').disabled = true;
   try { const p = await pickFolder($('#sDir').value); if (p) $('#sDir').value = p; } finally { $('#sPick').disabled = false; }
 };
-api('/api/settings').then(s => {
-  if (s.platform !== 'windows') return;
-  const hw = document.querySelector('#sEnc option[value=hardware]');
-  if (hw) hw.textContent = 'Hardware encoder (NVIDIA / Intel / AMD GPU): leaves the CPU free';
-}).catch(() => {});
+// "Encode with" (bake-in cards): GPU, CPU balanced or CPU max. Saved as the default for next time.
+function encRender() {
+  document.querySelectorAll('.encpick button').forEach(b => b.classList.toggle('on', b.dataset.e === encMode));
+  const txt = encMode === 'gpu'
+    ? (gpuName ? `Uses the ${gpuName} video encoder: the CPU stays almost idle.`
+       : gpuChecked ? 'No GPU encoder found on this computer, so it uses half the CPU instead.' : 'Uses the graphics chip: the CPU stays almost idle.')
+    : encMode === 'balanced' ? 'Uses half the CPU cores, at low priority.'
+    : 'Uses every CPU core: fastest, but the computer is busy while it runs.';
+  document.querySelectorAll('.enchint').forEach(h => h.textContent = txt);
+  if ($('#sEnc')) $('#sEnc').value = encMode;
+}
+document.querySelectorAll('.encpick').forEach(p => p.onclick = e => {
+  const m = e.target.closest('button')?.dataset.e; if (!m) return;
+  encMode = m; encRender(); dlSummary && dlSummary();
+  api('/api/settings', {bake_encoder: m}).catch(() => {});
+});
+(async function loadEnc(tries = 0) {
+  try {
+    const s = await api('/api/settings');
+    encMode = s.bake_encoder || 'gpu'; gpuName = s.gpu; gpuChecked = s.gpu_checked; encRender();
+    if (!s.gpu_checked && tries < 20) setTimeout(() => loadEnc(tries + 1), 1500);  // GPU test still running
+  } catch {}
+})();
 $('#sCancel').onclick = () => $('#settings').close();
 $('#sSave').onclick = async () => {
   await api('/api/settings', {output_dir: $('#sDir').value, subfolder_per_channel: $('#sSub').checked,
     max_parallel: +$('#sPar').value || 2, fragments: +$('#sFrag').value || 8, chat_workers: +$('#sChat').value || 8,
     bake_encoder: $('#sEnc').value, download_connections: Math.min(32, Math.max(1, +$('#sConn').value || 12))});
-  $('#settings').close(); loadDisk();
+  $('#settings').close(); loadDisk(); encMode = $('#sEnc').value; encRender();
 };
 
 /* ---------- audio converter ---------- */

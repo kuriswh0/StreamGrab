@@ -55,7 +55,7 @@ DEFAULT_SETTINGS = {
     "subfolder_per_channel": True,
     "chat_style": dict(render.DEFAULT_STYLE),
     "chat_presets": {},          # name -> chat style
-    "bake_encoder": "fast",      # fast (CPU x264) | hardware (VideoToolbox)
+    "bake_encoder": "gpu",       # gpu | balanced | max (see render.ENCODERS); each download can override it
     "download_connections": 12,  # parallel segment downloads for trimmed Twitch VODs
 }
 
@@ -72,6 +72,10 @@ def load_settings():
         s["chat_presets"] = {**render.clean_presets(render.STARTER_PRESETS), **(s.get("chat_presets") or {})}
         s["presets_seeded"] = True
     s["chat_presets"] = render.clean_presets(s.get("chat_presets"))
+    # Until 1.0.4 the default was "fast" (all CPU cores), which could pin the CPU at 100%: start on the GPU.
+    if not s.get("encoder_v2"):
+        s["bake_encoder"], s["encoder_v2"] = "gpu" if s.get("bake_encoder") in (None, "fast", "hardware") else s["bake_encoder"], True
+    s["bake_encoder"] = render.encoder_mode(s.get("bake_encoder"))
     return s
 
 
@@ -304,6 +308,17 @@ def full_frame(url, t, fresh=False):
 # ------------------------------------------------------------------ update check
 
 _UPDATE = {}
+GPU = {}  # {"name": "NVIDIA" / None} once checked (a quick ffmpeg test at startup)
+
+
+def _check_gpu():
+    try:
+        GPU["name"] = render.gpu_name()
+    except Exception:  # noqa: BLE001 - no GPU encoder: the app falls back to the CPU
+        GPU["name"] = None
+
+
+threading.Thread(target=_check_gpu, daemon=True).start()
 
 
 def _version_tuple(v):
@@ -499,9 +514,16 @@ class Job:
         o = self.opts
         audio_only = o.get("audio_only")
         self.stage = "Downloading audio" if audio_only else "Downloading video"
+        youtube = self.info.get("platform") == "youtube"
+        trimmed = start is not None or end is not None
+        # YouTube sends each video as one big file over one (often throttled) connection. "dashy" makes
+        # yt-dlp fetch it in chunks, -N at a time: ~11x faster in testing (101 MB in 3.9 s instead of 45 s).
+        # A section of a video up to an hour long is quicker to get whole this way and cut here than to
+        # stream through ffmpeg (which runs at about 2x real time).
+        cut_here = youtube and trimmed and 0 < (self.info.get("duration") or 0) <= 3600
         cmd = ["yt-dlp", "--no-playlist", "--no-warnings", "--newline", "--progress",
                "-N", str(SETTINGS["fragments"]), "-f", "ba/b" if audio_only else self._format(),
-               "-o", base_path + ".%(ext)s",
+               "-o", base_path + (".full" if cut_here else "") + ".%(ext)s",
                "--progress-template",
                "download:@@P %(progress.downloaded_bytes)s|%(progress.total_bytes)s|"
                "%(progress.total_bytes_estimate)s|%(progress._speed_str)s|%(progress._eta_str)s",
@@ -516,7 +538,7 @@ class Job:
                 cmd += ["--embed-thumbnail", "--convert-thumbnails", "jpg"]
         else:
             cmd += ["--merge-output-format", "mp4"]
-        if start is not None or end is not None:
+        if trimmed and not cut_here:
             if not audio_only and self.info.get("kind") == "TwitchVod":
                 out = self._fast_section(base_path, start, end)
                 if out:
@@ -527,11 +549,12 @@ class Job:
         # YouTube sometimes refuses a download link with "HTTP Error 403: Forbidden". A new attempt gets fresh
         # links, and the last one asks as YouTube's embedded player does, which still gets full-quality formats
         # (other client types tested in Nov 2026 only offered 360p).
-        youtube = self.info.get("platform") == "youtube"
-        attempts = [[], [], ["--extractor-args", "youtube:player_client=web_embedded"]] if youtube else [[]]
+        attempts = [["formats=dashy"], ["formats=dashy"], ["formats=dashy", "player_client=web_embedded"]] if youtube else [[]]
         first_errs = None
-        for n, extra in enumerate(attempts):
-            final, errs = self._run_ytdlp(cmd[:-1] + extra + cmd[-1:], base_path, start, end)
+        for n, ea in enumerate(attempts):
+            extra = ["--extractor-args", "youtube:" + ";".join(ea)] if ea else []
+            final, errs = self._run_ytdlp(cmd[:-1] + extra + cmd[-1:], base_path, None if cut_here else start,
+                                          None if cut_here else end)
             if self.cancel.is_set():
                 return None
             if errs is None:
@@ -540,16 +563,37 @@ class Job:
             if n == 0 and not forbidden:
                 raise RuntimeError("\n".join(errs))
             first_errs = first_errs or errs
-            if n == len(attempts) - 1 or (n > 0 and not forbidden and not extra):
+            if n == len(attempts) - 1 or (n > 0 and not forbidden and len(ea) < 2):
                 raise RuntimeError("\n".join(first_errs))  # report the 403, not whatever the fallback hit
             self.stage, self.progress = "Retrying", 0.0
             self.detail = f"YouTube refused the download (403), trying again ({n + 2} of {len(attempts)})"
             if self.cancel.wait(3 * (n + 1)):
                 return None
             self.stage = "Downloading audio" if self.opts.get("audio_only") else "Downloading video"
+        if final and cut_here:
+            final = self._cut(final, base_path, start, end)
         if final:
             self.files.append(final)
         return final
+
+    def _cut(self, full, base_path, start, end):
+        """Cuts start-end out of a whole download (no re-encoding, like yt-dlp's own sections)."""
+        self.stage, self.detail = "Cutting the section", ""
+        out = base_path + os.path.splitext(full)[1]
+        cmd = ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-ss", str(start or 0)]
+        if end is not None:
+            cmd += ["-to", str(end)]
+        cmd += ["-i", full, "-map", "0", "-c", "copy", "-avoid_negative_ts", "make_zero"]
+        if out.endswith((".mp4", ".m4a")):
+            cmd += ["-movflags", "+faststart"]
+        p = subprocess.run(cmd + [out], capture_output=True, text=True)
+        if p.returncode != 0 or not os.path.exists(out):
+            raise RuntimeError("Cutting the section failed:\n" + (p.stderr or "")[-400:])
+        try:
+            os.remove(full)
+        except OSError:
+            pass
+        return out
 
     def _run_ytdlp(self, cmd, base_path, start, end):
         """Runs one yt-dlp attempt. Returns (final_path, None) on success, or (None, error_lines)."""
@@ -675,7 +719,7 @@ class Job:
         render.burn(video_file, self.messages, out, style or o.get("chat_style") or SETTINGS["chat_style"],
                     offset=self.chat_offset, login=self.info.get("login"), platform=self.info.get("platform"),
                     progress=prog, cancel=self.cancel, on_procs=lambda ps: setattr(self, "procs", ps),
-                    encoder=SETTINGS.get("bake_encoder", "fast"))
+                    encoder=o.get("encoder") or SETTINGS.get("bake_encoder"))
         self.procs = []
         self.files.insert(0, out)
         if not o.get("keep_original", False) and self.kind != "burn":
@@ -1008,14 +1052,16 @@ class Handler(BaseHTTPRequestHandler):
             with open(os.path.join(STATIC, "index.html"), "rb") as fh:
                 return self._send(200, fh.read(), "text/html; charset=utf-8")
         if path in ("/icon.png", "/favicon.ico"):  # window / taskbar icon (made by windows/make_ico.sh)
-            with open(os.path.join(STATIC, "icon.png"), "rb") as fh:
-                return self._send(200, fh.read(), "image/png")
+            ico = path == "/favicon.ico"
+            with open(os.path.join(STATIC, "favicon.ico" if ico else "icon.png"), "rb") as fh:
+                return self._send(200, fh.read(), "image/x-icon" if ico else "image/png")
         if path == "/api/jobs":
             with JOBS_LOCK:
                 jobs = sorted((j.public() for j in JOBS.values()), key=lambda j: -j["created"])
             return self._send(200, jobs)
         if path == "/api/settings":
-            return self._send(200, {**SETTINGS, "platform": PLATFORM, "version": APP_VERSION})
+            return self._send(200, {**SETTINGS, "platform": PLATFORM, "version": APP_VERSION, "gpu": GPU.get("name"),
+                                    "gpu_checked": "name" in GPU})
         if path == "/api/update/progress":
             return self._send(200, updater.STATE)
         if path == "/api/update":
@@ -1152,6 +1198,7 @@ class Handler(BaseHTTPRequestHandler):
                         SETTINGS[k] = (render.clean_style(body[k]) if k == "chat_style"
                                        else render.clean_presets(body[k]) if k == "chat_presets"
                                        else type(DEFAULT_SETTINGS[k])(body[k]))
+                SETTINGS["bake_encoder"] = render.encoder_mode(SETTINGS.get("bake_encoder"))
                 if "output_dir" in body:  # store "~/x" as a full path, and never an empty one
                     SETTINGS["output_dir"] = os.path.expanduser(SETTINGS["output_dir"].strip()) or DEFAULT_SETTINGS["output_dir"]
                 save_settings()

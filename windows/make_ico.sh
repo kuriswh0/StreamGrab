@@ -17,5 +17,6 @@ for s, d in zip(sizes, data):
     entries += struct.pack("<BBBBHHII", s % 256, s % 256, 0, 0, 1, 32, len(d), off); off += len(d)
 open(out, "wb").write(head + entries + b"".join(data))
 shutil.copy(f"{tmp}/256.png", web)  # window / taskbar icon for the UI page
+shutil.copy(out, web.replace("icon.png", "favicon.ico"))
 PY
 echo "wrote windows/streamgrab.ico and static/icon.png"
