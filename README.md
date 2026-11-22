@@ -16,6 +16,8 @@ Download Twitch and YouTube videos, chat and live streams, and bake the chat rig
 
 <img src="docs/chat-style.gif" width="800" alt="Changing the chat layout, font size and background in the chat style editor">
 
+**Captions.** Tick **Captions (.srt)** to save a YouTube video's captions (uploaded ones, or YouTube's automatic ones) as an .srt next to the video, trimmed to match when you download a section.
+
 **YouTube to MP3.** Save just the audio as MP3, WAV, FLAC, M4A or Opus, with title, artist and cover art.
 
 <img src="docs/youtube-to-mp3.gif" width="800" alt="Adding two YouTube links and downloading them as MP3">
@@ -25,7 +27,7 @@ Download Twitch and YouTube videos, chat and live streams, and bake the chat rig
 - **Channel browser:** list a channel's broadcasts, highlights or uploads and send them to the Download page.
 - **Audio converter:** MP3, AAC, OGG, Opus, WMA, FLAC, ALAC, WAV and AIFF, in batches, keeping tags and cover art.
 - **Queue** with progress, cancel, retry and re-render chat. Batch downloads: paste several links.
-- **Updates itself:** when a new version is out, click **Update** in the sidebar and StreamGrab downloads it, installs it and reopens (the portable Windows zip gets a download link instead).
+- **Updates itself:** when a new version is out, click **Update** in the sidebar (or **Check for updates**, then **Install**) and StreamGrab downloads it, installs it and reopens (the portable Windows zip gets a download link instead).
 
 <sub>Demo footage: NASA's SpaceX Crew-13 launch (NASA). Chat in the demos is sample chat.</sub>
 

@@ -34,6 +34,7 @@ import chat
 import convert
 import fastdl
 import live
+import captions
 import render
 import updater
 
@@ -179,6 +180,9 @@ def get_info(url):
         "login": (info.get("uploader_id") or "").lower() if plat == "twitch" else "",
         "channel_url": info.get("channel_url") or info.get("uploader_url") or "",
     }
+    track = captions.pick_track(info) if plat == "youtube" else None
+    summary["captions"] = captions.describe(track)  # e.g. "en" or "en (automatic)"; "" = none
+    summary["caption_track"] = list(track) if track else None
     if plat in ("twitch", "youtube"):
         # A frame for the chat style preview, grabbed in the background so it's usually ready by the
         # time the Chat style tab is opened: the middle of the video (VODs still being recorded
@@ -495,11 +499,17 @@ class Job:
             exts.append("." + AUDIO_FORMATS[fmt][0] if o.get("audio_only") else ".mp4")
         if o.get("chat"):
             exts += [".chat.json", ".chat.txt", ".chat.html"]
+        if o.get("captions"):
+            exts.append(".srt")
         base_path = reserve_base(os.path.join(output_dir(info["channel"], o.get("output_dir")), base), exts)
         try:
             video_file = None
             if o.get("video", True):
                 video_file = self._download_video(base_path, start, end)
+            if self.cancel.is_set():
+                return
+            if o.get("captions") and info.get("caption_track"):
+                self._download_captions(base_path, start, end)
             if self.cancel.is_set():
                 return
             if o.get("chat") and info["chat"]:
@@ -575,6 +585,18 @@ class Job:
         if final:
             self.files.append(final)
         return final
+
+    def _download_captions(self, base_path, start, end):
+        """YouTube captions as an .srt next to the video (same name, so players load it automatically).
+        A failure doesn't fail the download: the job just says so."""
+        self.stage, self.detail = "Downloading captions", ""
+        try:
+            n = captions.download(self.url, tuple(self.info["caption_track"]), base_path + ".srt", start, end)
+            self.files.append(base_path + ".srt")
+            if not n:
+                self.detail = "No captions in this section"
+        except Exception as e:  # noqa: BLE001
+            self.detail = f"Captions failed: {str(e)[:150]}"
 
     def _cut(self, full, base_path, start, end):
         """Cuts start-end out of a whole download (no re-encoding, like yt-dlp's own sections)."""

@@ -351,6 +351,8 @@
           <label class="chip"><input type="checkbox" class="cf" value="txt" checked>TXT</label>
           <label class="chip"><input type="checkbox" class="cf" value="html" checked>HTML replay</label>
         </div>
+        <span class="vsep"></span>
+        <label class="chip" id="subsChip" title="YouTube captions as an .srt file next to the video (trimmed to the section)"><input type="checkbox" id="optSubs"><span id="subsTxt">Captions (.srt)</span></label>
       </div>
 
       <div class="card group">
@@ -689,9 +691,19 @@ $('#url').addEventListener('input', () => {
   if (current && urls()[0] !== current.url && urls()[0] !== current._input) clearInfo();
   dlSummary();
 });
+// Captions chip: shows the language once a video is fetched; off for videos without captions (Twitch).
+$('#optSubs').checked = localStorage.getItem('sg.subs') === '1';
+$('#optSubs').addEventListener('change', () => { localStorage.setItem('sg.subs', $('#optSubs').checked ? '1' : '0'); dlSummary(); });
+function subsState(i) {
+  const none = i && !i.captions;
+  $('#optSubs').disabled = !!none;
+  $('#subsTxt').textContent = i && i.captions ? `Captions (.srt) · ${i.captions}` : none ? 'No captions' : 'Captions (.srt)';
+  $('#subsChip').title = none ? (i.platform === 'twitch' ? "Twitch VODs don't have captions" : 'This video has no captions')
+    : 'YouTube captions as an .srt file next to the video (trimmed to the section)';
+}
 function clearInfo() {
   current = null; $('#info').classList.add('hidden'); $('#welcome').classList.remove('hidden');
-  setQualities(null); trimSetup(null); dlSummary();
+  setQualities(null); subsState(null); trimSetup(null); dlSummary();
 }
 $('#url').addEventListener('paste', () => setTimeout(() => { if (urls().length === 1) fetchInfo(); }, 0));
 
@@ -725,6 +737,7 @@ async function fetchInfo() {
       </div>`;
     $('#info').classList.remove('hidden'); $('#welcome').classList.add('hidden');
     setQualities(i.qualities);
+    subsState(i);
     trimSetup(i);
     dlSummary();
   } catch (e) {
@@ -743,6 +756,7 @@ function collectOpts() {
     video: $('#optVideo').checked,
     chat: $('#optChat').checked,
     chat_formats: [...document.querySelectorAll('.cf:checked')].map(c => c.value),
+    captions: $('#optSubs').checked && !$('#optSubs').disabled,
     start: $('#start').value.trim(),
     end: $('#end').value.trim(),
   };
@@ -752,7 +766,7 @@ function collectOpts() {
   return o;
 }
 async function queue(list, opts) {
-  if (!opts.video && !opts.chat) throw new Error('Pick at least Video or Chat.');
+  if (!opts.video && !opts.chat && !opts.captions) throw new Error('Pick at least Video, Chat or Captions.');
   if (opts.burn && (!opts.video || !opts.chat || opts.audio_only)) throw new Error('Baking chat in needs both Video and Chat (and not audio only).');
   await api('/api/jobs', {urls: list, opts});
   setQFilter('active');
@@ -840,6 +854,7 @@ function dlSummary() {
   if (!o.video) bits.push('chat only');
   if (o.chat && o.chat_formats.length) bits.push('chat as ' + o.chat_formats.map(f => f === 'html' ? 'HTML replay' : f.toUpperCase()).join(', '));
   else if (!o.chat) bits.push('no chat');
+  if (o.captions) bits.push('captions (.srt)');
   if (o.burn) bits.push('chat baked in on ' + ({gpu: 'the GPU', balanced: 'half the CPU', max: 'all CPU cores'}[o.encoder] || 'the GPU') + (o.keep_original ? ' (original kept)' : ''));
   $('#dlSub').textContent = bits.join(' · ');
 }
@@ -1571,16 +1586,26 @@ $('#updNote').addEventListener('click', async e => {
   }
 });
 // "Check for updates" in the sidebar: asks GitHub right away and says what it found for a few seconds.
-let updMsgTimer = null;
+// When it finds a new version the button turns into "Install 1.0.x": the next click installs it
+// (the same as the update box), or opens the download page for copies that can't update themselves.
+let updMsgTimer = null, updFound = null;
 $('#updBtn').onclick = async () => {
   const btn = $('#updBtn'), txt = $('#updBtnTxt'), show = (msg, title) => {
     txt.textContent = msg; btn.title = title || msg;
     clearTimeout(updMsgTimer); updMsgTimer = setTimeout(() => { txt.textContent = 'Check for updates'; btn.title = 'Check GitHub for a newer version'; }, 5000);
   };
+  if (updFound) {  // second click: install it
+    if (updFound.auto) $('#updNote').click(); else window.open(updFound.url, '_blank');
+    return;
+  }
   btn.disabled = true; txt.textContent = 'Checking…'; clearTimeout(updMsgTimer);
   const u = await checkUpdate(true);
   btn.disabled = false;
-  if (u.newer) show(`${u.latest} available`, `Version ${u.latest} is available: use the download link below`);
+  if (u.newer) {
+    updFound = u; clearTimeout(updMsgTimer);
+    txt.textContent = u.auto ? `Install ${u.latest}` : `Get ${u.latest}`;
+    btn.title = u.auto ? `Download and install version ${u.latest}, then reopen StreamGrab` : `Open the download page for ${u.latest}`;
+  }
   else if (u.error || !u.latest) show("Couldn't check for updates", u.error || 'No release found');
   else show(`Up to date · ${u.current}`);
 };
