@@ -119,6 +119,8 @@ jobs:
           Write-Host "Installed to $env:LOCALAPPDATA\Programs\StreamGrab"
       - name: Self-update installs the latest release and reopens
         shell: pwsh
+        env:
+          STREAMGRAB_GITHUB_TOKEN: ${{ github.token }}  # inherited by the app the step starts
         run: |
           $dir = "$env:LOCALAPPDATA\Programs\StreamGrab"
           $inst = "$env:LOCALAPPDATA\StreamGrab\instance.json"
@@ -130,7 +132,7 @@ jobs:
           $base = "http://127.0.0.1:$($old.port)"
           $h = @{ Origin = $base }
           $u = Invoke-RestMethod "$base/api/update?force=1" -Headers $h
-          Write-Host "current $($u.current), latest $($u.latest), auto $($u.auto)"
+          Write-Host "current $($u.current), latest $($u.latest), auto $($u.auto) $($u.error)"
           if (!$u.newer -or !$u.auto) { throw "update not offered" }
           Invoke-RestMethod "$base/api/update/install" -Method Post -Headers $h -ContentType 'application/json' -Body '{}' | Out-Null
           $done = $false

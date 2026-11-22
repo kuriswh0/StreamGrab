@@ -335,8 +335,10 @@ def update_status(force=False):
         return _UPDATE["data"]
     data = {"current": APP_VERSION, "newer": False}
     try:
-        req = urllib.request.Request(f"https://api.github.com/repos/{UPDATE_REPO}/releases/latest",
-                                     headers={"User-Agent": "StreamGrab", "Accept": "application/vnd.github+json"})
+        headers = {"User-Agent": "StreamGrab", "Accept": "application/vnd.github+json"}
+        if os.environ.get("STREAMGRAB_GITHUB_TOKEN"):  # only the CI tests set this (shared IPs hit GitHub's anonymous limit)
+            headers["Authorization"] = "Bearer " + os.environ["STREAMGRAB_GITHUB_TOKEN"]
+        req = urllib.request.Request(f"https://api.github.com/repos/{UPDATE_REPO}/releases/latest", headers=headers)
         with urllib.request.urlopen(req, timeout=10) as r:
             rel = json.load(r)
         latest = str(rel.get("tag_name") or "").lstrip("v")
