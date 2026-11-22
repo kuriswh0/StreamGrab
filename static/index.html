@@ -40,6 +40,20 @@
   .upd b { display:block; color:#fff; font-size:13px; } .upd:hover { border-color:var(--accent); }
   .encrow { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
   .encpick { width:auto; flex:1; max-width:380px; }
+  .updbanner { position:fixed; top:14px; left:50%; transform:translateX(-50%); z-index:1000; width:min(480px, calc(100vw - 28px));
+    display:flex; gap:12px; align-items:center; padding:12px 14px; border-radius:12px; background:var(--s2);
+    border:1px solid var(--accent); box-shadow:0 12px 40px #000a; }
+  .updbanner .ic { font-size:20px; width:32px; height:32px; border-radius:9px; display:grid; place-items:center; background:#9b5cff26; color:#dcc8ff; animation:spin 1.4s linear infinite; }
+  .updbanner.error { border-color:var(--err); } .updbanner.error .ic { animation:none; color:var(--err); background:#ff5d5d1f; }
+  .updbanner .tx { flex:1; min-width:0; } .updbanner b { display:block; font-size:13px; }
+  .updbanner .tx span { font-size:12px; color:var(--dim); display:block; margin-top:2px; }
+  .updbanner .track { height:4px; border-radius:3px; background:var(--line2); margin-top:8px; overflow:hidden; }
+  .updbanner .track div { height:100%; background:var(--accent); transition:width .3s; }
+  .updbanner .track.indet div { width:35% !important; animation:slide 1.1s ease-in-out infinite; }
+  .updbanner.error .track { display:none; }
+  .updbanner .x { background:none; border:none; color:var(--dim); font-size:15px; cursor:pointer; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  @keyframes slide { from { transform:translateX(-100%); } to { transform:translateX(300%); } }
   .upd.busy { cursor:progress; border-color:var(--accent); }
   .upd:not(.hidden) + .disk { margin-top:0; }
   .disk .p { font-weight:700; margin:2px 0 8px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
@@ -292,6 +306,11 @@
 </style>
 </head>
 <body>
+<div class="updbanner hidden" id="updBanner" role="status" aria-live="polite">
+  <div class="ic">↻</div>
+  <div class="tx"><b id="updBTitle">Updating StreamGrab</b><span id="updBDetail"></span><div class="track"><div id="updBBar"></div></div></div>
+  <button class="x hidden" id="updBClose" title="Close">✕</button>
+</div>
 <div class="app">
   <aside class="side">
     <div class="logo"><div class="mark">▼</div><span>Stream<em>Grab</em></span></div>
@@ -1548,7 +1567,7 @@ async function checkUpdate(force = false) {
     const u = await api('/api/update' + (force ? '?force=1' : ''));
     $('#sVersion').textContent = 'StreamGrab ' + u.current;
     if (u.newer && u.url && !updating) {
-      updAuto = !!u.auto;
+      updAuto = !!u.auto; updLatest = u.latest;
       $('#updNote').href = u.url;
       $('#updNote').title = updAuto ? 'Download and install it, then reopen StreamGrab' : 'Open the download page';
       $('#updNote').querySelector('b').textContent = updAuto ? `Update to ${u.latest}` : 'Update available';
@@ -1559,31 +1578,54 @@ async function checkUpdate(force = false) {
   } catch (e) { return {error: e.message}; }
 }
 // Self-update (installed copies): download, check, install, reopen. Portable copies just get the link.
-let updAuto = false, updating = false;
-$('#updNote').addEventListener('click', async e => {
-  if (!updAuto) return;  // plain link to the release page
-  e.preventDefault();
+// Progress shows in a banner across the top of the window (visible at any window size), in the sidebar
+// box and on the Check for updates button.
+let updAuto = false, updating = false, updLatest = '';
+function updShow(title, detail, frac, error) {
+  const b = $('#updBanner');
+  b.classList.remove('hidden'); b.classList.toggle('error', !!error);
+  $('#updBTitle').textContent = title; $('#updBDetail').textContent = detail || '';
+  $('#updBBar').style.width = frac == null ? '100%' : `${Math.round(frac * 100)}%`;
+  $('#updBBar').parentElement.classList.toggle('indet', frac == null && !error);
+  $('#updBClose').classList.toggle('hidden', !error);
+  $('#updNote').querySelector('b').textContent = error ? "Update didn't install" : title;
+  $('#updVer').textContent = detail || '';
+  $('#updBtnTxt').textContent = error ? 'Check for updates' : (frac != null ? `Updating · ${Math.round(frac * 100)}%` : 'Updating…');
+  $('#updBtn').disabled = !error;
+}
+$('#updBClose').onclick = () => $('#updBanner').classList.add('hidden');
+async function installUpdate() {
   if (updating) return;
-  const note = $('#updNote'), ver = $('#updVer'), head = note.querySelector('b');
+  updating = true; $('#updNote').classList.add('busy');
+  updShow(`Updating StreamGrab to ${updLatest}`, 'Starting…', 0);
   try {
     await api('/api/update/install', {});
-  } catch (err) { ver.textContent = err.message; return; }
-  updating = true; note.classList.add('busy');
-  const label = {downloading: 'Downloading', verifying: 'Checking the download', installing: 'Installing', restarting: 'Reopening StreamGrab…'};
+  } catch (err) {
+    updating = false; $('#updNote').classList.remove('busy');
+    updShow("The update didn't start", err.message, 0, true); return;
+  }
+  const step = {verifying: 'Checking the download', installing: 'Installing the new version'};
   while (true) {
     await new Promise(r => setTimeout(r, 400));
     let s; try { s = await api('/api/update/progress'); } catch { continue; }
-    if (s.stage === 'error') { head.textContent = "Update didn't install"; ver.textContent = s.error; updating = false; note.classList.remove('busy'); return; }
-    head.textContent = label[s.stage] || 'Updating';
-    ver.textContent = s.stage === 'downloading' ? `${Math.round(s.progress * 100)}%` : 'Keep StreamGrab open';
-    if (s.stage === 'restarting') {
-      ver.textContent = 'It will open again in a moment';
-      await new Promise(r => setTimeout(r, 600));
+    if (s.stage === 'error') {
+      updating = false; $('#updNote').classList.remove('busy'); updFound = null;
+      updShow("The update didn't install", s.error + (/nothing was changed/i.test(s.error) ? '' : ' Your current version is unchanged.'), 0, true); return;
+    }
+    if (s.stage === 'downloading') updShow(`Updating StreamGrab to ${updLatest}`, `Downloading · ${Math.round(s.progress * 100)}%`, s.progress);
+    else if (s.stage === 'restarting') {
+      updShow(`Updating StreamGrab to ${updLatest}`, 'StreamGrab will close and reopen in a moment', null);
+      await new Promise(r => setTimeout(r, 1200));
       if (window.webkit?.messageHandlers?.native) window.webkit.messageHandlers.native.postMessage({type: 'quit'});
       else window.close();  // Windows: the launcher also closes for the update
       return;
-    }
+    } else updShow(`Updating StreamGrab to ${updLatest}`, step[s.stage] || 'Working…', null);
   }
+}
+$('#updNote').addEventListener('click', e => {
+  if (!updAuto) return;  // plain link to the release page
+  e.preventDefault();
+  installUpdate();
 });
 // "Check for updates" in the sidebar: asks GitHub right away and says what it found for a few seconds.
 // When it finds a new version the button turns into "Install 1.0.x": the next click installs it
@@ -1595,7 +1637,7 @@ $('#updBtn').onclick = async () => {
     clearTimeout(updMsgTimer); updMsgTimer = setTimeout(() => { txt.textContent = 'Check for updates'; btn.title = 'Check GitHub for a newer version'; }, 5000);
   };
   if (updFound) {  // second click: install it
-    if (updFound.auto) $('#updNote').click(); else window.open(updFound.url, '_blank');
+    if (updFound.auto) { updLatest = updFound.latest; installUpdate(); } else window.open(updFound.url, '_blank');
     return;
   }
   btn.disabled = true; txt.textContent = 'Checking…'; clearTimeout(updMsgTimer);
