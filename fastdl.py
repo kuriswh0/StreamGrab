@@ -49,9 +49,16 @@ def _fetch(url, path, cancel, retries=5):
             try:
                 req = urllib.request.Request(u, headers={"User-Agent": UA})
                 with urllib.request.urlopen(req, timeout=30) as r, open(path + ".tmp", "wb") as fh:
+                    expected = r.headers.get("Content-Length")
                     shutil.copyfileobj(r, fh, 1 << 20)
+                # A connection that drops mid-segment just ends the read early (urllib raises nothing), and a
+                # short segment leaves a hole in the clip that players show as frozen video with no sound.
+                got = os.path.getsize(path + ".tmp")
+                short = got != int(expected) if expected and expected.isdigit() else got % 188  # TS packets are 188 bytes
+                if short or got < 188:
+                    raise OSError(f"segment cut short ({got} of {expected or '?'} bytes)")
                 os.replace(path + ".tmp", path)
-                return os.path.getsize(path)
+                return got
             except urllib.error.HTTPError as e:
                 last = e
                 if e.code not in (403, 404):
