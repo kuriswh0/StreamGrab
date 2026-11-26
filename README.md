@@ -157,6 +157,7 @@ The server only listens on 127.0.0.1 and rejects requests from other origins.
   - **CPU · balanced**: x264 on half the cores. **CPU · max**: every core, fastest, but the computer is busy.
   - Encoding always runs at low priority, so the computer stays responsive.
 - **YouTube downloads** fetch each video in chunks, several at once (about 11× faster than one connection). Sections of videos up to an hour are downloaded whole and cut locally, which is quicker than streaming the section.
+- **Sections start on a keyframe**: a section is cut without re-encoding, so it begins on the keyframe at or just before the chosen start (at most a couple of seconds earlier). That keeps picture and sound in sync from the first frame; chat, captions and baked-in chat use the same start.
 - **Trimmed Twitch downloads** fetch only the segments they need, 12 at a time, at up to your line speed. While downloading, they briefly use extra disk space equal to the section's size.
 - **Chat renderer requires macOS**: it's written in Swift. When you run `server.py` directly, it's compiled automatically the first time it's needed.
 - **No percentage for trimmed YouTube downloads**: yt-dlp downloads these through ffmpeg, which doesn't report progress, so only size and speed are shown.

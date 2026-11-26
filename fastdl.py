@@ -63,8 +63,25 @@ def _fetch(url, path, cancel, retries=5):
     raise RuntimeError(f"Segment download failed: {last}")
 
 
+def keyframe_at_or_before(path, t):
+    """Time (seconds from the start of `path`) of the last video keyframe at or before t.
+    A cut without re-encoding has to begin on a keyframe: begun anywhere else, the video track only
+    starts at the next keyframe (up to a few seconds later), so players freeze the first frame and the
+    sound runs ahead of the picture."""
+    def probe(args):
+        p = subprocess.run(["ffprobe", "-v", "error", *args, path], capture_output=True, text=True, timeout=120)
+        return [float(x.split(",")[0]) for x in p.stdout.split() if x.split(",")[0].replace(".", "", 1).isdigit()]
+    first = probe(["-show_entries", "packet=pts_time", "-of", "csv=p=0", "-read_intervals", "%+#1"])
+    base = min(first) if first else 0.0
+    keys = probe(["-select_streams", "v:0", "-skip_frame", "nokey", "-show_entries", "frame=pts_time",
+                  "-of", "csv=p=0", "-read_intervals", f"{max(0.0, base + t - 30):.3f}%{base + t + 0.05:.3f}"])
+    before = [k - base for k in keys if k - base <= t + 0.001]
+    return max(before) if before else 0.0
+
+
 def download_section(url, fmt, out_path, start, end, workers=12, progress=None, cancel=None):
-    """Downloads [start, end] seconds of an HLS VOD to out_path (.mp4). Returns out_path."""
+    """Downloads [start, end] seconds of an HLS VOD to out_path (.mp4).
+    Returns (out_path, actual_start): the clip begins on the keyframe at or just before `start`."""
     p = subprocess.run(["yt-dlp", "-J", "--no-warnings", "--no-playlist", "-f", fmt, url],
                        capture_output=True, text=True, timeout=120)
     if p.returncode != 0:
@@ -124,12 +141,14 @@ def download_section(url, fmt, out_path, start, end, workers=12, progress=None, 
                 with open(seg, "rb") as fh:
                     shutil.copyfileobj(fh, out, 1 << 22)
                 os.remove(seg)
-        cmd = ["ffmpeg", "-y", "-v", "error", "-ss", f"{start - first_start:.3f}", "-i", joined,
-               "-t", f"{end - start:.3f}", "-map", "0", "-c", "copy", "-bsf:a", "aac_adtstoasc",
-               "-movflags", "+faststart", out_path]
+        cut = keyframe_at_or_before(joined, start - first_start)
+        actual_start = first_start + cut
+        cmd = ["ffmpeg", "-y", "-v", "error", "-ss", f"{cut:.3f}", "-i", joined,
+               "-t", f"{end - actual_start:.3f}", "-map", "0", "-c", "copy", "-bsf:a", "aac_adtstoasc",
+               "-avoid_negative_ts", "make_zero", "-movflags", "+faststart", out_path]
         r = subprocess.run(cmd, capture_output=True, text=True)
         if r.returncode != 0:
             raise RuntimeError("Joining segments failed:\n" + r.stderr[-600:])
     finally:
         shutil.rmtree(work, ignore_errors=True)
-    return out_path
+    return out_path, actual_start

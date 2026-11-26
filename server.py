@@ -488,6 +488,7 @@ class Job:
         self.info = info = get_info(self.url)
         start, end = parse_time(o.get("start")), parse_time(o.get("end"))
         trimmed = start is not None or end is not None
+        self.clip_start = None  # where a trimmed download really starts (set by the cutting step)
 
         d = info["upload_date"]
         date = f"{d[:4]}-{d[4:6]}-{d[6:]} " if len(d) == 8 else ""
@@ -510,6 +511,10 @@ class Job:
                 video_file = self._download_video(base_path, start, end)
             if self.cancel.is_set():
                 return
+            # A cut without re-encoding starts on a keyframe, slightly before the chosen start: chat,
+            # captions and the baked-in chat use that real start so they stay in sync with the video.
+            if trimmed and getattr(self, "clip_start", None) is not None:
+                start = self.clip_start
             if o.get("captions") and info.get("caption_track"):
                 self._download_captions(base_path, start, end)
             if self.cancel.is_set():
@@ -604,9 +609,13 @@ class Job:
         """Cuts start-end out of a whole download (no re-encoding, like yt-dlp's own sections)."""
         self.stage, self.detail = "Cutting the section", ""
         out = base_path + os.path.splitext(full)[1]
-        cmd = ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-ss", str(start or 0)]
+        # Start on a keyframe (see fastdl.keyframe_at_or_before), so picture and sound both start at 0.
+        audio_only = os.path.splitext(full)[1].lower() in (".mp3", ".m4a", ".wav", ".flac", ".opus", ".ogg")
+        start = (start or 0) if audio_only else fastdl.keyframe_at_or_before(full, start or 0)
+        self.clip_start = start
+        cmd = ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-ss", f"{start:.3f}"]
         if end is not None:
-            cmd += ["-to", str(end)]
+            cmd += ["-t", f"{end - start:.3f}"]
         cmd += ["-i", full, "-map", "0", "-c", "copy", "-avoid_negative_ts", "make_zero"]
         if out.endswith((".mp4", ".m4a")):
             cmd += ["-movflags", "+faststart"]
@@ -658,9 +667,9 @@ class Job:
             self.progress = frac
             self.detail = f"{human_size(done)}  ·  {human_size(speed)}/s  ETA {chat.fmt_ts(eta)}"
         try:
-            fastdl.download_section(self.url, self._format(), out, start, end,
-                                    workers=int(SETTINGS.get("download_connections") or 12),
-                                    progress=prog, cancel=self.cancel)
+            _, self.clip_start = fastdl.download_section(self.url, self._format(), out, start, end,
+                                                         workers=int(SETTINGS.get("download_connections") or 12),
+                                                         progress=prog, cancel=self.cancel)
         except fastdl.Unsupported:
             return None  # fall back to yt-dlp
         self.files.append(out)
