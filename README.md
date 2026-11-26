@@ -148,7 +148,7 @@ The server only listens on 127.0.0.1 and rejects requests from other origins.
 ## Limitations
 
 - **Sub-only and deleted VODs** need a logged-in Twitch account. Login isn't supported yet, so only public VODs work.
-- **Twitch chat paging**: Twitch blocks cursor paging for non-browser clients ("failed integrity check"), so chat is paged by time offset. If one second of chat contains more than about 60 messages, a few of them can be missed. In testing, xQc's chat peaked at 15 messages per second.
+- **Twitch chat paging**: Twitch blocks cursor paging for non-browser clients ("failed integrity check"), so chat is paged by time offset. If one second of chat contains more than about 60 messages, a few of them can be missed. In testing, xQc's chat peaked at 15 messages per second. Twitch also throttles after about 100 quick requests by sending empty pages; StreamGrab recognises those mid-VOD and waits them out (a few seconds), so no chat is lost.
 - **YouTube live chat** isn't recorded during live streams. YouTube VOD chat replays still download.
 - **Twitch ads**: during ad breaks, a live recording captures Twitch's ad placeholder screen.
 - **Recordings start with buffered footage**: each recording begins with roughly 10–20 seconds of video that Twitch had already buffered. That footage has no chat.

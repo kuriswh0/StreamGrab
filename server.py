@@ -257,14 +257,15 @@ def preview_sample(url, at):
                 at = float(at if at not in (None, "") else min(600, (info["duration"] or 0) / 2))
                 key = (vod, int(at))
                 if key not in _SAMPLES:
-                    page = chat._comments_page(vod, offset=max(0, at - 30))
+                    page = chat._comments_page(vod, offset=max(0, at - 30),
+                                               expect_more=at < (info["duration"] or 0) - 60)
                     _SAMPLES[key] = sorted((chat._twitch_msg(e["node"]) for e in page.get("edges") or []),
                                            key=lambda m: m["t"])
                 msgs = [m for m in _SAMPLES[key] if m["t"] <= at + 1]
                 if msgs:
                     return msgs, at + 1, info.get("login"), "twitch"
-        except Exception:  # noqa: BLE001 - fall back to demo chat
-            pass
+        except Exception as e:  # noqa: BLE001 - fall back to demo chat, but say why in the log
+            print(f"chat preview: using sample chat ({type(e).__name__}: {e})", flush=True)
     demo = render.demo_messages()
     return demo, demo[-1]["t"] + 0.5, None, "twitch"
 

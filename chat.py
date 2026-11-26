@@ -34,7 +34,24 @@ def twitch_gql(body, timeout=30):
         return json.load(r)
 
 
-def _comments_page(video_id, offset=None, cursor=None):
+# After ~100 quick requests Twitch throttles for several seconds, and it does so by answering with an
+# EMPTY page ("no more chat") instead of an error. A page asked for mid-VOD is never really empty (an
+# offset query returns the next messages however far ahead they are), so those are retried.
+EMPTY_RETRY_WAITS = (2, 3, 4, 5, 6)
+
+
+def _comments_page(video_id, offset=None, cursor=None, expect_more=False):
+    """One page of VOD chat. expect_more: chat continues after `offset`, so an empty page means Twitch
+    is throttling; wait and ask again (up to ~20 s) instead of returning it."""
+    for wait in (*EMPTY_RETRY_WAITS, None) if expect_more else (None,):
+        page = _comments_page_once(video_id, offset, cursor)
+        if page.get("edges") or page.get("pageInfo", {}).get("hasNextPage") or wait is None:
+            return page
+        threading.Event().wait(wait)
+    return page
+
+
+def _comments_page_once(video_id, offset=None, cursor=None):
     variables = {"videoID": str(video_id)}
     if cursor:
         variables["cursor"] = cursor
@@ -108,7 +125,8 @@ def download_twitch_chat(video_id, duration, start=0, end=None, workers=8,
         while True:
             if cancel and cancel.is_set():
                 raise Cancelled()
-            page = _comments_page(video_id, offset=offset)
+            # Mid-VOD, an empty page means throttling (see _comments_page); near the end it's real.
+            page = _comments_page(video_id, offset=offset, expect_more=offset < min(hi, (duration or hi) - 5))
             edges = page.get("edges") or []
             last_t = offset
             with lock:
@@ -135,7 +153,7 @@ def download_twitch_chat(video_id, duration, start=0, end=None, workers=8,
     return out
 
 
-def twitch_activity(video_id, duration, bins=120, workers=16):
+def twitch_activity(video_id, duration, bins=120, workers=8):
     """Rough chat activity across a Twitch VOD (messages per minute in `bins` slots).
 
     Fetches one comments page at the start of each slot (a page holds the next few dozen messages),
@@ -149,7 +167,7 @@ def twitch_activity(video_id, duration, bins=120, workers=16):
     def rate(i):
         lo = i * step
         try:
-            edges = _comments_page(video_id, offset=lo).get("edges") or []
+            edges = _comments_page(video_id, offset=lo, expect_more=lo < duration - 60).get("edges") or []
         except Exception:  # noqa: BLE001 - one missing slot just reads as quiet
             return 0.0
         ts = [e["node"]["contentOffsetSeconds"] for e in edges]
